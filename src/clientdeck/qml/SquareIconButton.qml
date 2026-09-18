@@ -23,6 +23,12 @@ Rectangle {
     // unaffected. ClientRow.qml turns both on for actual app buttons.
     property bool deletable: false
     property bool draggable: false
+    // Opt-in: makes the `label` glyph always fill 75% of the button's
+    // width/height (via fontSizeMode: Text.Fit) instead of the fixed
+    // Theme.iconGlyphSize used by every other label (client initials, theme
+    // toggle, zoom +/-, reset) — set at call sites that want an
+    // oversized glyph, e.g. the per-row "add app" +.
+    property bool bigLabel: false
 
     // Whether pressing *this* button counts as "clicking elsewhere" for
     // any other button currently armed for delete — on by default, since
@@ -158,10 +164,19 @@ Rectangle {
 
     Text {
         anchors.centerIn: parent
+        width: root.bigLabel ? parent.width * 0.75 : implicitWidth
+        height: root.bigLabel ? parent.height * 0.75 : implicitHeight
         visible: root.iconSource === "" && !root.visualArmed
         text: root.label
         color: Theme.textPrimary
-        font.pixelSize: Theme.iconGlyphSize
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        // Text.Fit scales the glyph up to fill the 75%-of-button box above
+        // exactly, however big/small the button ends up (window resize,
+        // Theme.uiScale zoom, …) — a fixed pixelSize couldn't guarantee
+        // "always 75%" across those.
+        fontSizeMode: root.bigLabel ? Text.Fit : Text.FixedSize
+        font.pixelSize: root.bigLabel ? 512 : Theme.iconGlyphSize
     }
 
     Text {

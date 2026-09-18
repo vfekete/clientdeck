@@ -252,6 +252,7 @@ RowLayout {
 
     SquareIconButton {
         label: "+"
+        bigLabel: true
         tooltipText: "Add application"
         onClicked: root.addAppRequested()
     }

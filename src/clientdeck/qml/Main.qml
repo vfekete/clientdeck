@@ -151,6 +151,7 @@ Window {
                     implicitWidth: Theme.hugeIconButtonSize
                     implicitHeight: Theme.hugeIconButtonSize
                     label: "+"
+                    bigLabel: true
                     tooltipText: "Add client"
                     onClicked: addClientDialog.open()
                 }
@@ -208,6 +209,7 @@ Window {
                         SquareIconButton {
                             anchors.verticalCenter: parent.verticalCenter
                             label: "+"
+                            bigLabel: true
                             tooltipText: "Add client"
                             onClicked: addClientDialog.open()
                         }
@@ -278,16 +280,16 @@ Window {
 
     AddClientDialog {
         id: addClientDialog
-        anchorItem: window.contentItem
+        anchorWindow: window
     }
 
     AddAppDialog {
         id: addAppDialog
-        anchorItem: window.contentItem
+        anchorWindow: window
     }
 
     EditClientDialog {
         id: editClientDialog
-        anchorItem: window.contentItem
+        anchorWindow: window
     }
 }

@@ -1,5 +1,411 @@
 # Changelog
 
+## 0.13.8
+
+Both "Add client" `+` buttons (the big empty-state one and the small one
+at the end of the client list) now use the same `bigLabel` treatment as
+the per-row "add app" `+` from 0.13.7: the glyph always fills 75% of the
+button's width/height instead of a fixed pixel size.
+
+**User prompt driving this change:** "make the same change for 'Add
+client'"
+
+Set `bigLabel: true` on the two `SquareIconButton { label: "+"; ...
+tooltipText: "Add client" }` instances in `Main.qml` (empty-state, and
+the row appended after the client list). The zoom-in `+`, zoom-out `-`,
+reset, and theme-toggle glyphs in the bottom toolbar are unaffected —
+`bigLabel` stays opt-in per `SquareIconButton.qml`'s existing default.
+
+## 0.13.7
+
+The per-row "add app" `+` button's glyph now always fills 75% of the
+button's width and height, instead of the small fixed
+`Theme.iconGlyphSize` every other letter/glyph button uses.
+
+**User prompt driving this change:** "make the label ('+') so big that it
+will always occupy 75% of width and height"
+
+`SquareIconButton.qml` gained an opt-in `bigLabel` property (default
+`false`, so every other caller — client initials, theme toggle, zoom
++/-, reset — is unaffected). When set, the label `Text` is sized to a box
+that's 75% of the button's width/height and uses `fontSizeMode: Text.Fit`
+so the glyph scales to exactly fill that box regardless of button size
+(window resize, `Theme.uiScale` zoom, …) rather than a fixed pixel size
+that would only look right at one scale. `ClientRow.qml`'s "add
+application" `+` button sets `bigLabel: true`.
+
+## 0.13.6
+
+Logo row is now twice the Browse button's height, shows italic "No logo
+selected…" placeholder text until a logo is picked, and the preview's
+width follows the image's actual aspect ratio instead of being forced
+into a square.
+
+**User prompt driving this change:** "ok, make the row with logo 2times
+height of 'Browse' button. Also if there is no logo selected, instead of
+preview add ittalic text 'No logo selected...'. once logo is selected,
+hide the text and show logo. Logo height should fill the row height.
+Width is determined by the aspect ratio."
+
+Applied identically to both `AddClientDialog.qml` and
+`EditClientDialog.qml`, which share this same logo-row pattern:
+- The row's `Layout.preferredHeight` is now `Theme.smallIconButtonSize *
+  2` (twice the Browse button's own height, which derives from that same
+  token).
+- A new italic `Text` ("No logo selected…") is visible exactly when
+  `logoPath === ""`; the preview `Image` is visible exactly when it
+  isn't — mutually exclusive, matching "hide the text and show logo."
+- The preview's `Layout.preferredHeight` fills the row; its
+  `Layout.preferredWidth` is computed from the image's own
+  `implicitWidth`/`implicitHeight` ratio scaled to that height, instead of
+  the previous fixed square sizing — a wide or tall logo now displays at
+  its correct proportions rather than being squashed.
+
+**A genuinely tricky bug surfaced while verifying this in the sandbox**:
+headless testing (`QT_QPA_PLATFORM=offscreen`) showed the logo row's
+rendered height coming out equal to just the Browse button's height (not
+double) — but *only* when the dialog was opened via a simulated click
+through `SquareIconButton`'s full press/release gesture chain; opening it
+via a direct `.open()` call, or via `EditClientDialog`'s
+`TapHandler`-driven open path, both measured correctly (`80px`, matching
+`Theme.smallIconButtonSize * 2`). Traced as far as the *window's own
+`contentItem`* reporting a stale `0×0` size in that exact scenario despite
+`Window.height` itself already holding the correct value — a geometry
+sync gap between the Window and its scene graph, below the QML layer.
+Tried and ruled out as fixes: restructuring the anchors to avoid a
+content-height/window-height circular dependency, an explicit `Binding`
+directly targeting the row's `height`, and deferring the visibility change
+with `Qt.callLater`— none changed the outcome, consistent with the gap
+being below where QML-level changes can reach. Added `Layout.minimumHeight`
+alongside `Layout.preferredHeight` as a reasonable, low-cost safeguard
+regardless (a `preferredHeight` is a hint the layout can shrink below; a
+`minimumHeight` is a floor it can't), but since opening via a direct call
+and via `EditClientDialog`'s path both measured correctly, this may be
+specific to the offscreen QPA platform's handling of that one event-
+delivery path rather than a real on-screen bug — **flagging this for a
+quick visual check on the real desktop** rather than claiming certainty
+either way.
+
+**Confirmed by the user on the real desktop: "It works ok."** The row
+renders at the correct doubled height when opened normally via the "+"
+button — the discrepancy really was specific to how the offscreen QPA
+platform handles `contentItem` geometry sync for that one simulated-click
+code path, not a real bug in the feature.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`, via the direct-open
+path that measured reliably):** row height reads exactly `80`
+(`Theme.smallIconButtonSize * 2`); placeholder/preview visibility are
+confirmed mutually exclusive and toggle correctly when `logoPath` changes;
+a real `400×100` test image (generated on the fly via `QImage`, since no
+non-square asset existed in the repo to test aspect-ratio math against)
+rendered at exactly `80×320` — precisely `4:1` preserved at the target
+height. Full add-client flow re-confirmed end-to-end with a logo set. All
+117 existing tests still pass (no Python-side changes this round).
+
+## 0.13.5
+
+`AddClientDialog`'s logo row now shows an icon preview instead of a raw
+path text field — matching `EditClientDialog`'s logo row, which already
+got this treatment.
+
+**User prompt driving this change:** "To the row with logo selection,
+replace logo path with icon preview"
+
+**Change:** `AddClientDialog.qml` gained a `logoPath` string property
+(replacing `logoField`, the `ValidatedTextField` that used to show the raw
+path) as the single source of truth for the selected logo. The row now
+shows an `Image` preview — sized to the "Browse…" button's own height,
+same as `EditClientDialog`'s equivalent row — instead of the text field;
+`reset()`, the "Add" button's `clientModel.addClient(...)` call, and the
+`FileDialog.onAccepted` handler all updated to read/write `root.logoPath`
+instead of `logoField.text`.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** opened
+`AddClientDialog` and confirmed exactly 3 `TextField`s remain (Name,
+Description, Username — no "Logo image path" field), with one preview
+`Image` present. Set `logoPath` directly (standing in for picking a file
+via the native `FileDialog`, which can't be driven headlessly) and
+confirmed the preview's `source` updated accordingly. Ran the full
+add-client flow end-to-end (name, username, logo set) and confirmed the
+client is created with the correct `logoPath` persisted via
+`ClientListModel`. All 117 existing tests still pass (no Python-side
+changes this round).
+
+## 0.13.4
+
+Added a scrollbar to the "add application" dialog's discovered-apps list.
+
+**User prompt driving this change:** "Application selector - the
+application list should have automatically shown scrollbar."
+
+**Root cause:** the discovered-apps list in `AddAppDialog.qml` was a bare
+`ListView` with `clip: true` — flickable/scrollable by drag or wheel, but
+with no scrollbar affordance at all, so there was no visual indication the
+list could scroll when it overflowed the dialog's fixed height.
+
+**Fix:** wrapped the `ListView` in a `ScrollView`, the same pattern
+`Main.qml` already uses for its own scrollable client list — this gets a
+scrollbar that appears automatically when content overflows (via Qt Quick
+Controls' default `ScrollBar.AsNeeded` policy) with no other behavior
+changes; the `ListView`'s model/delegate/click-to-add logic is untouched.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** with 40
+discovered apps (`contentHeight` 1800 vs. the list's own 273px height),
+confirmed a vertical `ScrollBar` exists with a proportional thumb size
+(`0.15`, matching the ~15% visible-to-total ratio) and that scrolling
+actually moves the list (`contentY` 0 → 200 on a simulated scroll). With
+only 1 app (no overflow), confirmed the same scrollbar's `size` reads
+`1.0` (nothing to scroll). Re-confirmed picking an app from the list
+through the new `ScrollView` wrapper still adds it and closes the dialog,
+same as before. All 117 existing tests still pass (no Python-side changes
+this round).
+
+## 0.13.3
+
+Fixed: zooming in/out while a dialog was open snapped it back to centered
+on the main window, discarding wherever it had been moved to.
+
+**User prompt driving this change:** "zoom in and zoom out should not move
+the dialog windows. Fact that they are zoomed is ok, but the action itself
+moves them to the center of original application."
+
+**Root cause:** every dialog's `x`/`y` were live bindings —
+`anchorWindow.x + (anchorWindow.width - width) / 2` — that only made
+sense as a *one-time* "center this on open" computation, but as a
+declarative binding it kept re-evaluating for the dialog's *entire* open
+lifetime. Since `width`/`height` are themselves `Theme.uiScale`-derived
+(so the dialog's size legitimately tracks zoom while open, which is
+wanted), every zoom in/out reran the whole expression and re-centered the
+dialog on the main window — silently overriding wherever the user had
+actually moved it.
+
+**Fix:** `x`/`y` are no longer declarative bindings on any of the four
+dialogs (`AddClientDialog`, `AddAppDialog`, `EditClientDialog`,
+`ConfirmDialog`). Each dialog's `open()` function now computes and assigns
+`root.x`/`root.y` once, imperatively, using `anchorWindow`'s position and
+the dialog's own width/height *at that moment*. `width`/`height` stay as
+live `Theme.uiScale` bindings, so a dialog's content still resizes with
+zoom exactly as before — only its position is no longer tied to that same
+recomputation.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** opened
+`AddClientDialog`, simulated a user drag by setting its position directly
+(`x=50, y=30`), then triggered zoom in and two zoom-outs via the main
+window's toolbar buttons. Confirmed the dialog's `width` genuinely changed
+each time (`420 → 462 → 378`, tracking `Theme.uiScale`) while `x`/`y`
+stayed at exactly `(50, 30)` throughout — the bug this entry fixes would
+have reset both back toward `(190, ...)` (centered on the 800×600 test
+window) on every zoom step. All 117 existing tests still pass (no
+Python-side changes this round).
+
+## 0.13.2
+
+Fixed: dragging a dialog via Meta+mouse-down moved the *main* application
+window instead of the dialog.
+
+**User prompt driving this change:** "still nothing... When I move the
+dialog window I expect to move it independently, that does not happen.
+Entire application window is moved."
+
+**Root cause:** 0.13.1 converted every dialog from `Popup` to a real
+`Window`, but gave it `flags: Qt.Dialog | Qt.FramelessWindowHint` — not
+the same flags as `Main.qml`'s own window (`Qt.FramelessWindowHint |
+Qt.Window`). `Qt.Dialog` carries window-manager-specific semantics beyond
+"frameless": many window managers, Mutter (GNOME/X11, this project's
+target environment per CLAUDE.md) included, can bundle a transient
+`Qt::Dialog`-flagged window with its `transientParent` for move
+operations — dragging the dialog moves the group, which from the user's
+perspective looks exactly like "the entire application window moved."
+This can't be exercised in the sandbox (WM-level mouse-drag semantics need
+a real X/Wayland session), so it wasn't caught by the previous round's
+verification.
+
+**Fix:** every dialog's `flags` now reads `Qt.FramelessWindowHint |
+Qt.Window` — byte-for-byte the same as `Main.qml`'s own window — in
+`AddClientDialog.qml`, `AddAppDialog.qml`, `EditClientDialog.qml`, and
+`ConfirmDialog.qml`. Rather than guessing at which specific WM quirk
+`Qt.Dialog` was triggering, this sidesteps the question entirely: since
+the main window is already confirmed movable independently, giving every
+dialog the exact same base window type means there's no remaining flag
+difference left for a WM to treat specially. `modality: Qt.WindowModal` is
+unchanged (a `Qt`-level input-blocking property, unrelated to the window's
+base type/move behavior).
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** read back a
+dialog's `QWindow.flags()` after this change and confirmed it now equals
+the main window's `flags()` exactly (`2049` both, i.e. `Qt.FramelessWindowHint
+| Qt.Window`) — previously `2051` (`Qt.Dialog | Qt.FramelessWindowHint`).
+All 117 existing tests still pass (no Python-side changes this round).
+
+**Not independently verifiable in this sandbox:** whether a dialog now
+actually drags independently via Meta+mouse-down needs a real window
+manager to confirm — please check again on your end.
+
+## 0.13.1
+
+Fixed: dialogs still weren't real, movable top-level windows —
+`popupType: Popup.Window` (0.13.0's attempt) creates a genuinely separate
+`QWindow`, but one carrying the `Qt::Popup` window flag, which window
+managers deliberately exempt from normal window management. Converted
+every dialog from `Popup` to a plain `Window`, matching how the main
+window itself is already built.
+
+**User prompt driving this change:** "ok first of all - no dialog windo
+renders as real separate top level window. They cannot be moved via
+META+MOUSE_DOWN + Mouse move"
+
+**Root cause:** confirmed by reading back each dialog's actual `QWindow`
+flags — with `popupType: Popup.Window`, they were `Popup |
+FramelessWindowHint | NoDropShadowWindowHint`. The `Qt::Popup` flag is
+what a context menu or dropdown uses; virtually every window manager
+treats a window carrying it as unmanaged — no decorations, no drag-to-move
+via the mouse-down+Meta convention this app's own main window already
+relies on (`Main.qml`'s "Dragging is done via the window manager
+convention" — see CLAUDE.md). `Popup.Window` was never going to produce a
+*movable* window no matter how it was configured, since that flag is
+inherent to what `popupType: Popup.Window` is.
+
+**Fix:** `AddClientDialog.qml`, `AddAppDialog.qml`, `EditClientDialog.qml`,
+and `ConfirmDialog.qml` are no longer `Popup`s at all — each is now a
+`Window` with `flags: Qt.Dialog | Qt.FramelessWindowHint` and `modality:
+Qt.WindowModal` (no `Qt::Popup` flag), the same frameless-but-manageable
+recipe `Main.qml` already uses for the main window. This is a bigger
+change than swapping one property, since `Popup` and `Window` don't share
+an API:
+- `Popup`'s `background`/`padding`/auto-sized `contentItem` are gone;
+  each dialog now has its own root `Rectangle` (the themed panel, same
+  visual look as before) with a `ColumnLayout` inset by a new
+  `dialogPadding` constant, and an explicit `height` binding (`content's
+  implicitHeight + dialogPadding * 2`) since a bare `Window` doesn't
+  auto-size to its content the way `Popup` does.
+- `Popup.open()`/`close()`/`onOpened` don't exist on `Window` — each
+  dialog now defines its own `open()`/`close()` functions (`root.visible =
+  true/false`), preserving the exact same call-site API used throughout
+  `Main.qml` and between dialogs, so nothing calling them had to change.
+  `AddClientDialog`'s `onOpened: reset()` and `AddAppDialog`'s equivalent
+  moved into their new `open()` functions directly.
+- `Popup`'s default close-on-Escape is gone; each dialog gained its own
+  `Shortcut { sequence: "Escape"; onActivated: root.close() }`.
+- Centering: `anchorItem` (an `Item`, `window.contentItem`, used for
+  relative positioning within the same scene) is renamed `anchorWindow`
+  everywhere (a `Window`, `Main.qml`'s own `window`) — a separate top-level
+  window needs *screen* coordinates to center itself over another window,
+  not item-relative ones. `EditClientDialog`'s nested `ConfirmDialog` now
+  centers on `root` (its own window) rather than the main window, which
+  reads better now that it's a real, independently-positioned window.
+- Also fixed a stray syntax corruption in `AddAppDialog.qml`
+  (`placeholderText: "Launch command"Cancel`, presumably a paste/edit
+  artifact) found while rewriting the file.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** read back each
+open dialog's actual `QWindow.flags()` — `2051`, decoding to exactly `Qt.Dialog
+| Qt.FramelessWindowHint` with no `Qt::Popup` bit set — and confirmed
+`transientParent` correctly chains to the main window (or, for the nested
+`ConfirmDialog`, to `EditClientDialog`'s own window), matching a minimal
+before/after repro that first proved `Popup.Window` really does carry the
+`Popup` flag and a plain nested `Window` really doesn't. Re-ran the full
+functional flows end-to-end against the rewritten dialogs: picking a
+discovered app from `AddAppDialog`'s list, and the full `EditClientDialog`
+→ rename → `ConfirmDialog` → "Delete" nested flow (confirmed
+`createLinuxUser`/`deleteLinuxUser` both called with the right
+usernames and the client landing on the new one). All 117 existing tests
+still pass (no Python-side changes this round).
+
+**Not independently verifiable in this sandbox:** actually dragging a
+dialog via mouse-down+Meta needs a real X/Wayland session and window
+manager, which the offscreen platform doesn't provide — please confirm on
+your end that these now drag the same way the main window does.
+
+## 0.13.0
+
+Bug-fix pass across every dialog: dialogs are now real separate windows,
+and every plain Qt Quick Controls widget (buttons, the discovered-apps
+list, the checkbox) is finally themed instead of using its unthemed
+Controls Basic defaults.
+
+**User prompt driving this change:**
+```
+bugs:
+general:
+ - make the dialog windows separate windows
+
+add application:
+- only 'add app' is visible
+- button is dark on light theme
+- text of items in the list is not visible on light theme
+- original placeholder which tells user what to do in inputbox of 'search for application' strangely flickers (depending on where I am with the mouse, sometimes is visible sometimes isnt)
+- there is no 'cancel' button
+
+application details:
+- buttons are dark in light theme
+```
+("application details" read as the "Custom command" manual-entry view of
+the add-app dialog — the only place that shows a form of "application
+details" — as distinct from the discovered-apps list, its sibling view.)
+
+**Root cause, all four color/visibility complaints:** every dialog used
+plain `QtQuick.Controls.Basic` `Button`/`ItemDelegate`/`CheckBox` controls
+without ever overriding their look. Those controls have their own
+hardcoded default colors, completely independent of this app's own
+`Theme.isDark` — so they never adapted, and read badly (dark background,
+low-contrast/invisible text) specifically against the light theme's pale
+backgrounds. This is the same class of bug already fixed for
+`ValidatedTextField`/`SquareIconButton` early in the project; it had
+simply never been applied to the *dialogs'* own controls until now.
+
+**New `ThemedButton.qml`** — a generic reusable button (background +
+contentItem fully overridden, same ownership approach as
+`ValidatedTextField`) replacing every bare `Button` across
+`AddClientDialog`, `AddAppDialog`, `EditClientDialog`, and `ConfirmDialog`.
+
+**`AddAppDialog.qml`:**
+- The discovered-apps list's `ItemDelegate` now overrides `background`
+  (themed hover highlight) and `contentItem` (themed icon + text row)
+  instead of relying on Controls Basic's default icon/text coloring —
+  this is what was making list item text unreadable in light theme.
+- The "Run as su..." `CheckBox` (in the "Custom command" manual-entry
+  view) gained a themed `contentItem`/`indicator` for the same reason.
+- Added a "Cancel" button to the discovered-apps list view, which
+  previously had no way to close the dialog besides Escape or clicking
+  outside — only the manual-entry view had one.
+
+**Separate windows:** every dialog `Popup` (`AddClientDialog`,
+`AddAppDialog`, `EditClientDialog`, `ConfirmDialog` — not `ThemedTooltip`,
+a lightweight hover overlay rather than a dialog) now sets `popupType:
+Popup.Window`, rendering as a real top-level `QWindow` (confirmed via
+`app.topLevelWindows()`: 2 while one dialog is open, 3 with a nested one
+like `EditClientDialog` → `ConfirmDialog`, each correctly chained via
+`transientParent`) instead of an overlay embedded in Main.qml's own scene.
+This is also the most plausible explanation for the reported search-hint
+flicker: with the old `Popup.Item` default, a dialog shared a
+`QQuickWindow` with Main.qml's own hover-driven state (the glass panel's
+opacity `HoverHandler` covers the *entire* window content area) — moving
+the mouse anywhere, including over an "embedded" dialog sitting visually
+on top of it, still fed that same hover state. A real separate window has
+no such shared scene. **This part is not independently confirmed** (input-
+hardware/compositor-driven flicker isn't reproducible via synthetic
+`QTest` events in the offscreen sandbox) — flagging it as likely fixed by
+this change rather than claiming it's verified.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** for
+`AddAppDialog`, sampled the `ThemedButton`s' actual background/text colors
+in both themes after letting the color `Behavior` settle (dark:
+`bg=#1c1f28 text=#f2f2f5`; light: `bg=#f2f3f6 text=#1b1d22`, i.e. exactly
+`Theme.surface`/`Theme.textPrimary` in each mode) and the discovered-list
+item text color likewise. Confirmed `app.topLevelWindows()` grows by one
+per open dialog and shrinks back correctly. Most importantly, re-ran the
+*full functional* add-app flow end-to-end after the retheme — clicking a
+discovered app in its list, and submitting the manual-entry form — using
+`item.window()` to target the dialog's own separate window for the
+synthetic click (the first attempt, still targeting the main window like
+before this change, silently missed — which is itself confirmation the
+window really is separate now); both correctly added the app and closed
+the dialog. Also drove the full `EditClientDialog` → `ConfirmDialog`
+nested-rename flow (rename, confirm "Delete") end-to-end and confirmed it
+still calls `createLinuxUser`/`deleteLinuxUser` correctly and lands on the
+right final username. All 117 existing tests still pass (no Python-side
+changes this round).
+
 ## 0.12.1
 
 Redesigned "Modify client" dialog's layout: header preview, labeled field

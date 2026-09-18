@@ -27,3 +27,7 @@ so the deck only ever contains exactly what a given client's work requires.
 The result is a quick-launcher that makes "which client am I working as
 right now" an explicit, visible choice — a button on a themed dock — rather
 than an implicit, error-prone habit.
+
+Application itself is meant for GNOME, maybe I'll make it more universal in the
+future. I wrote it together with claude code, but I'm not very happy about the
+quality of the code.
