@@ -1,0 +1,37 @@
+[project]
+name = "clientdeck"
+version = "0.12.1"
+description = "Quick-launcher GUI for isolated per-client Linux user environments"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.7",
+    # Used only for the KWin real-backdrop-blur X11 hint (compositor.py) —
+    # pure Python, no C extension, so it packages the same as any other
+    # dependency via Nuitka onefile.
+    "python-xlib>=0.33",
+]
+
+[project.scripts]
+clientdeck = "clientdeck.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+build = [
+    "nuitka>=2.4",
+    # pyside6-deploy shells out to `python -m pip install ...` (for Nuitka
+    # itself and for `patchelf`) — a uv-managed venv has no `pip` by
+    # default, so it must be provisioned here for that to work.
+    "pip",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/clientdeck"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ClientDeck
+Comment=Quick-launcher for isolated per-client environments
+Exec=clientdeck
+Icon=clientdeck
+Terminal=false
+Categories=Utility;Development;

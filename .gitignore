@@ -222,5 +222,16 @@ CLAUDE.md
 claude-docs/
 claude-blocks/
 
+# ClientDeck packaging (see claude-blocks/python-single-app-instance.claude.md
+# and build.sh) — pyside6-deploy/Nuitka working files, regenerated per build,
+# never committed. dist/ itself is already covered by the "Distribution /
+# packaging" section above.
+src/clientdeck/pysidedeploy.spec
+src/clientdeck/deployment/
+src/clientdeck/deploy_main.py
+*.build/
+*.dist/
+*.onefile-build/
+
 # VSCode (vfe: I think it is a good idea not to enforce any specific settings at all)
 .vscode/
