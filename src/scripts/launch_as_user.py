@@ -13,10 +13,7 @@ argv contract:
 Exit code: the launched command's own exit code, or a small fixed non-zero
 code if `su` itself could not be started at all (e.g. not installed).
 
-MOCK_MODE: the app is currently in UI/UX-prototyping phase — this script
-does not actually run `su` or `xhost`, or launch anything. It only prints
-the commands it would have run and returns success. Flip MOCK_MODE to
-False once prototyping is done and real launching should happen.
+MOCK_MODE: see docs/comments-details.md [19].
 """
 
 from __future__ import annotations

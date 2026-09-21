@@ -1,10 +1,8 @@
 import QtQuick
 import QtQuick.Controls.Basic
 
-// Generic, reusable "live-validated input with themed error state".
-// Per CLAUDE.md this pattern must not be special-cased to the username
-// field on the add-client dialog — any field needing live validity
-// feedback should reuse this component with its own `validator`/`errorText`.
+// Generic, reusable live-validated input with themed error state.
+// See docs/comments-details.md [36].
 TextField {
     id: root
 

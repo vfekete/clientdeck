@@ -33,11 +33,7 @@ RowLayout {
             id: logoHoverHandler
         }
 
-        // Double-clicking the logo opens the "modify client" dialog — see
-        // CLAUDE.md's "Modifying a client" section. TapHandler (not a
-        // MouseArea) since the logo needs no other pointer behavior and a
-        // passive handler coexists cleanly with the HoverHandler above,
-        // same reasoning as SquareIconButton's own tooltip HoverHandler.
+        // Opens the "modify client" dialog. TapHandler, not MouseArea — see [54].
         TapHandler {
             onDoubleTapped: root.editRequested()
         }
@@ -52,27 +48,15 @@ RowLayout {
         }
     }
 
-    // A plain Item + Repeater, not a Row: reordering needs each button's
-    // on-screen slot to sometimes differ from its actual data index (while
-    // a drag is in progress), which means computing `x` by hand per
-    // delegate — a positioner like Row always overrides that itself.
+    // Plain Item + Repeater, not a Row — see docs/comments-details.md [55].
     Item {
         id: appsContainer
 
-        // RowLayout still reserves spacing on *both* sides of a child even
-        // when its implicitWidth is 0 — so with zero apps, the "+" button
-        // ended up one full Theme.spacing further right than a row's first
-        // app button sits when apps do exist (confirmed visually: the "+"
-        // in an empty row was misaligned with the first app button of a
-        // populated row). Hiding this Item entirely when there's nothing
-        // to show removes it from the layout altogether, matching
-        // RowLayout's documented behavior for invisible children.
+        // Hidden (not just empty) when there are no apps — see [56].
         visible: root.apps.length > 0
 
         readonly property real buttonAdvance: Theme.iconButtonSize + Theme.spacing
-        // Reported to the outer RowLayout so it can size this child
-        // correctly — a plain Item, unlike Row/Layout types, does not
-        // compute this from its children on its own.
+        // Computed and reported manually for the outer RowLayout — see [57].
         implicitWidth: root.apps.length > 0 ? root.apps.length * buttonAdvance - Theme.spacing : 0
         implicitHeight: Theme.iconButtonSize
 
@@ -90,11 +74,7 @@ RowLayout {
         property string dragGhostIcon: ""
         property string dragGhostLabel: ""
 
-        // Drop-target placeholder: a themed, accent-tinted outline sitting
-        // in the slot the drag would currently land in — "properly colored
-        // placeholder where the drop will potentially land." Sits behind
-        // everything else (z: -1) and only while a drag is actually
-        // happening.
+        // Drop-target placeholder — see [58].
         Rectangle {
             visible: appsContainer.draggedIndex >= 0
             z: -1
@@ -138,34 +118,13 @@ RowLayout {
                     return (appButton.index >= drop && appButton.index < dragged) ? appButton.index + 1 : appButton.index
                 }
 
-                // The real button never follows the cursor itself — it
-                // stays put (just faded via `ghosted`) at its own,
-                // possibly-shifted slot the whole time; dragGhost below is
-                // the separate, non-interactive copy that actually follows
-                // the cursor. Deliberately not the same item: this button's
-                // own MouseArea is what's holding the mouse grab for the
-                // entire drag, and changing *this* item's geometry
-                // synchronously from within that very MouseArea's own move
-                // handler turned out to silently drop the grab after 2-3
-                // move events (confirmed via instrumented headless
-                // testing — MouseArea.canceled fired, not a scripting
-                // artifact). Keeping this item stationary sidesteps that
-                // entirely, and matches CLAUDE.md's spec more literally
-                // besides ("a small translucent *copy* ... following the
-                // cursor" — not the original button itself).
+                // Stays put (just faded); dragGhost is the copy that follows the cursor — see [59].
                 x: displaySlot * appsContainer.buttonAdvance
                 y: 0
 
                 Behavior on x { NumberAnimation { duration: Theme.animationDuration } }
 
-                // modelData.icon (when present — see AddAppDialog.qml,
-                // which sets it both for a picked .desktop app and, now,
-                // for a manually-entered one too) is either an absolute
-                // image path or an icon-theme name; the latter only
-                // resolves via the "image://theme/" provider
-                // (icon_provider.py), same resolution AddAppDialog.qml's
-                // own list uses. Letters are only a fallback for apps with
-                // no icon at all.
+                // Icon path/theme-name resolution — see [60].
                 iconSource: modelData.icon
                     ? (modelData.icon.startsWith("/") ? modelData.icon : "image://theme/" + modelData.icon)
                     : ""
@@ -192,16 +151,7 @@ RowLayout {
                     appsContainer.dropIndex = Math.max(0, Math.min(appsRepeater.count - 1, slot))
                 }
                 onDragFinished: {
-                    // Capture into locals and reset the shared drag state
-                    // *before* the moveAppRequested() call below, not
-                    // after: that call round-trips into Python and back
-                    // (clientModel.moveApp() -> dataChanged -> Repeater
-                    // re-evaluates `model: root.apps`), which can destroy
-                    // and recreate every delegate *synchronously* —
-                    // including this very one, mid-handler. Anything
-                    // referencing `appsContainer`/`appButton` written
-                    // *after* that call would then fail with "appsContainer
-                    // is not defined", confirmed by actually triggering it.
+                    // Locals captured, drag state reset, before moveAppRequested() — see [61].
                     const fromIndex = appButton.index
                     const toIndex = appsContainer.dropIndex
                     appsContainer.draggedIndex = -1
@@ -213,11 +163,7 @@ RowLayout {
             }
         }
 
-        // The small translucent copy of the dragged button that actually
-        // follows the cursor (see the comment on the delegate's `x` above
-        // for why this has to be a separate, non-interactive item rather
-        // than the real button moving itself). Purely visual — no
-        // MouseArea, never the target of any input.
+        // The small translucent copy that follows the cursor — see [62].
         Rectangle {
             id: dragGhost
             visible: appsContainer.draggedIndex >= 0

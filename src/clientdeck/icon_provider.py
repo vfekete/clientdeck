@@ -1,34 +1,8 @@
 """Resolves `image://theme/<name>` QML image sources to the desktop's
 current icon theme.
 
-Qt does not register a "theme" image provider automatically for a plain
-`QGuiApplication` + `QQmlApplicationEngine` app — confirmed missing on a
-real host: Qt logged `Invalid image provider: image://theme/<name>` for
-every discovered `.desktop` app whose `Icon=` value was a theme name
-rather than an absolute path (which is the common case; see
-`desktop_apps.py`). `QIcon.fromTheme()` implements the freedesktop icon
-theme spec on Linux and works fine under `QGuiApplication` — it needs no
-widgets — so a small `QQuickImageProvider` wrapping it is enough to make
-`image://theme/<name>` resolve, once the provider itself is registered.
-
-That alone wasn't sufficient, though: `QIcon.themeSearchPaths()` defaults
-to just `[":/icons"]` (a Qt *resource* path, always empty for an app that
-doesn't bundle icons into a .qrc) — real filesystem directories like
-`/usr/share/icons` are only added by Qt's own platform-theme integration,
-which isn't guaranteed to run (confirmed empty under the `offscreen` QPA
-platform used for this project's own headless testing, and not something
-to assume works for every real desktop session either). `ensure_icon_theme_configured()`
-adds the standard XDG icon directories unconditionally, and falls back to
-the universal "hicolor" theme name only if nothing was already detected
-— confirmed this combination resolves real icon names (including the
-exact ones reported missing: "gsmartcontrol", "gwenview", "granatier")
-that otherwise came back null.
-
-One further gap confirmed by that same testing: some apps (e.g. "gummi")
-only ship an icon in `/usr/share/pixmaps/<name>.<ext>` — the legacy
-freedesktop fallback location, outside the theme-directory hierarchy
-entirely — and `QIcon.fromTheme()` does not check it. `resolve_theme_pixmap()`
-falls back to it directly when the theme lookup comes back empty.
+See docs/comments-details.md [15] for why this module exists and the
+theme-search-path/pixmap-fallback quirks it works around.
 """
 
 from __future__ import annotations

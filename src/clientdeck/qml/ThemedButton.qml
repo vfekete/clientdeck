@@ -1,16 +1,8 @@
 import QtQuick
 import QtQuick.Controls.Basic
 
-// Generic, reusable themed push button — a plain QtQuick.Controls.Basic
-// `Button` never adapts to Theme.isDark on its own (it has its own
-// hardcoded default background/text colors, independent of this app's
-// theme entirely); confirmed the hard way as the "button is dark on light
-// theme" / "buttons are dark in light theme" reports across every dialog
-// that used a bare `Button`. Fully owns its own background/contentItem
-// (same approach as ValidatedTextField/SquareIconButton) rather than
-// trying to coax the right look out of Controls Basic's palette, so every
-// dialog's Cancel/Add/Apply/Browse/etc. button reuses this instead of a
-// bare `Button`.
+// Generic, reusable themed push button, used by every dialog's
+// Cancel/Add/Apply/Browse/etc. button. See docs/comments-details.md [33].
 Button {
     id: root
 

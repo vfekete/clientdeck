@@ -158,10 +158,7 @@ class ConfigStore:
     def update_client(
         self, old_username: str, name: str, description: str, new_username: str, logo_path: str | None
     ) -> None:
-        """Edits an existing client's fields in place — including,
-        possibly, its username, which is otherwise this store's lookup key
-        everywhere else. Mutating the same ClientEntry (rather than
-        remove+re-add) keeps its `apps` list attached across a rename."""
+        """Edits an existing client's fields in place, incl. username. See [12]."""
         client = self.get_client(old_username)
         if client is None:
             raise KeyError(f"no client with username {old_username!r}")
@@ -186,11 +183,7 @@ class ConfigStore:
         self.save()
 
     def move_app(self, username: str, from_index: int, to_index: int) -> None:
-        """Reorders one client's apps — used by drag-and-drop reordering in
-        ClientRow.qml. Both endpoints (including moving to the very first
-        or very last position) are valid; out-of-range indices are a no-op
-        rather than an error, since this is driven by live UI state that
-        could in principle race with a concurrent removal."""
+        """Reorders one client's apps (drag-and-drop in ClientRow.qml). See [13]."""
         client = self.get_client(username)
         if client is None or not (0 <= from_index < len(client.apps)) or not (0 <= to_index < len(client.apps)):
             return

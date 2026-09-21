@@ -1,5 +1,226 @@
 # Changelog
 
+## 0.14.2
+
+Loader now displays at 25% of the target monitor's height (instead of
+the source image's full ~1254px native size), and the shimmer effect
+got noticeably more contrasty. First real, on-host confirmation that the
+splash from 0.14.0/0.14.1 actually works.
+
+**User prompt driving this change:** "it looks very good and it works.
+Now change the loader, First it should find out height of the monitor
+it going to be shown on and its own height should be 25% of that height
+(so rescale the picture before run). Right now I'm not sure about the
+performance, so I'll test it manually. Also the light effects they are
+good exactly as I wanted, just try to make them a little bit more
+contrast."
+
+`src/loader/main.c`: `disp_w`/`disp_h` are now computed right after the
+target monitor's geometry is known (25% of its height, width following
+the source's own aspect ratio), and every size-dependent piece of state
+(window, `XImage`, buffers, shimmer patches) is sized off those instead
+of the embedded source image's fixed `SPLASH_IMAGE_WIDTH`/`HEIGHT` —
+see docs/comments-details.md [117]. The source is downscaled to that
+size *once* at startup (`downscale_source()`, a box filter weighted by
+each source pixel's own alpha, to avoid a dark halo from this image's
+transparent corners bleeding into the downscaled edges), not resized
+every frame — which, besides being the obviously correct way to do it,
+directly addresses the performance concern raised here: every frame's
+`XPutPixel`/`XPutImage` cost now scales with the much smaller *displayed*
+pixel count rather than the full source's ~1.57M pixels regardless of
+how small the splash ends up on screen. `PATCH_AMPLITUDE` (the shimmer's
+max luma swing) raised from 40 to 64 for "a little bit more contrast",
+without touching the effect's timing/count/shape — see [118].
+
+Verified the same way as everything else in this file so far: compiles
+clean (`gcc -Wall -Wextra -std=c11`, zero warnings) against the real
+generated header with a stub `Xinerama.h`. Still can't build/link/run it
+for real in this sandbox (no `libxinerama-dev`, no X server) — the
+actual on-screen sizing, downscale quality, and shimmer contrast still
+need the same on-host manual check the user is already doing. All 131
+tests pass (no Python-side changes this round).
+
+## 0.14.1
+
+New `run.sh` builds and launches `clientdeck-loader` alongside the app
+for a source-checkout dev run, so the splash added in 0.14.0 isn't
+packaged-build-only anymore.
+
+**User prompt driving this change:** "I moved run.sh to
+`run-clientdesk.sh`, create new run.sh which starts entire application
+together with splash screen"
+
+`loader_ipc.maybe_launch_loader()` previously only ever talked to the
+loader when `is_packaged_build()` — a dev-mode wrapper setting up its
+own loader and socket would have been silently ignored. Reworked it to
+check `CLIENTDECK_LOADER_SOCKET` *first*: if already set (by a wrapper
+script), connect to it without launching a second loader process; only
+fall back to the packaged-build self-launch path if the env var isn't
+already there — see docs/comments-details.md [115]. New `run.sh`
+(`make -C src/loader` — a no-op if already built — then launches
+`clientdeck-loader` in the background with a fresh temp socket, exports
+`CLIENTDECK_LOADER_SOCKET`, then runs `uv run python -m clientdeck`) is
+that wrapper; the original splash-less script is preserved at
+`run-clientdesk.sh` per the user's own rename. Deliberately *not*
+`exec`'d into the final `uv run` command, unlike the old script — an
+`exec` would skip the `trap cleanup EXIT` that kills the backgrounded
+loader process and removes its temp socket dir once the app exits — see
+[116]. Either step (build or launch) failing degrades to running with no
+splash, same as the packaged path.
+
+Updated `tests/test_loader_ipc.py` for the new env-var-first behavior
+(connects without launching when the socket is already set, including
+outside a packaged build — the case that actually makes the new
+`run.sh` work) and verified `run.sh` itself by hand with stubbed
+`make`/loader/`uv` binaries: confirms the env var is correctly exported
+to both the loader and the app, and that the loader process and its
+temp socket dir are both cleaned up once the script exits. All 131
+tests pass.
+
+**Still needs on-host verification**: the actual splash appearing during
+`./run.sh` on a real X session once `libx11-dev`/`libxinerama-dev` are
+installed — everything above only confirms the process wiring, not the
+splash's on-screen behavior (already flagged in 0.14.0's entry).
+
+## 0.14.0
+
+Added `clientdeck-loader`: a minimal X11/Xinerama startup splash shown
+while ClientDeck's own PySide6/Qt startup is in progress, per
+`claude-blocks/python-qt-startup-splash.claude.md`.
+
+**User prompt driving this change:** "from claude-blocks read info about
+startup splash. Based on it, create simple Xorg / Xinerama startup
+loader which communicates with clientdesk application (start of loading
+vs fully loaded). While loading, show splash image
+(resources/splash_Screen.png) in the middle of the monitor on which app
+starts. Add small wait animation to the image. for example by changing
+luma of some random parts of the image. Image appearance and
+dissapearance should be fade-in and fade-out. Window which draws splas
+screen should not have border / system menu and its background should
+be transparent (but that all should be already written in the
+blueprint)"
+
+New: `src/loader/main.c` (plain C, only libX11 + libXinerama, no XRender
+— see docs/comments-details.md [98]), `src/loader/gen_splash_header.py`
+(build-time PNG→C-header baking via PySide6's `QImage`, so the compiled
+loader links no image-decoding library at runtime), and
+`src/loader/Makefile`. Window is `override_redirect` (no border/system
+menu), uses a depth-32 ARGB visual when available for genuine per-pixel
+transparency (falling back to blending onto this app's own dark-theme
+background color otherwise — see [101]), and is centered on Xinerama
+screen 0. The "wait animation" is a handful of random rectangular
+patches that each pulse a luma delta via a `sin(pi*t)` envelope,
+continuously respawning — see [103]. Whole-splash appearance/
+disappearance is a straightforward global-alpha fade in/out.
+
+App↔loader protocol: a UNIX domain socket, path passed via
+`CLIENTDECK_LOADER_SOCKET`; the loader binds/listens first, the app
+connects and sends `starting` then `running` (substring-matched, so it
+also works with the blueprint's optional staged/JSON form). New
+`src/clientdeck/loader_ipc.py` implements the app side (launch, connect
+with retry, send, all best-effort/never-raising — see [110]-[112]),
+wired into `src/clientdeck/app.py`'s `run()` as the very first action
+(see [113]), sending `running` only after a couple of `app.processEvents()`
+calls once the main window is actually painted (see [114]). Per the
+blueprint, the splash only launches for the packaged binary — dev/source
+checkouts never show it; the built binary can still be run standalone
+(no env var) to preview it, where it dismisses on click or a short
+timeout instead.
+
+`build.sh` now runs `make -C src/loader` and bundles the resulting
+binary via Nuitka's `--include-data-files` (a single file, so
+`--include-data-dir`/`--include-raw-dir` don't apply — see [16]).
+`paths.py` gained `get_loader_path()` following the existing
+packaged-vs-source pattern. New pytest coverage for everything testable
+headlessly: `loader_ipc.py`'s launch-decision/retry/no-op-safety logic
+(`tests/test_loader_ipc.py`) and `get_loader_path()`
+(`tests/test_paths.py`).
+
+**What could not be verified here** (see CLAUDE.md's "Environment
+constraints" — no real X server/compositor in the agent's sandbox, and
+this sandbox doesn't even have the libxinerama-dev/libxrender-dev
+headers installed): `main.c` has never been linked or run. It *was*
+syntax- and type-checked end-to-end (`gcc -Wall -Wextra -std=c11 -c`)
+against the real generated header with a stub `Xinerama.h` standing in
+for the one missing dev package, which caught and fixed two real
+portability bugs (`clock_gettime`/`CLOCK_MONOTONIC` and `M_PI` both need
+feature-test-macro handling under `-std=c11` — see [109]) — but nothing
+about its actual on-screen behavior, transparency, animation smoothness,
+or Xinerama monitor targeting has been visually confirmed. The Python
+side (`gen_splash_header.py`, `loader_ipc.py`, `paths.py`, and
+`app.py`'s full `run()` flow, including the new loader calls) *was*
+exercised directly, including an end-to-end headless
+(`QT_QPA_PLATFORM=offscreen`) run of `app.run()`.
+
+**Needs manual, on-host verification**: install `libx11-dev` and
+`libxinerama-dev`, run `make -C src/loader`, then run
+`src/loader/build/clientdeck-loader` directly (standalone mode) to check
+the splash's appearance, transparency (with a compositor running),
+fade-in/out timing, shimmer animation, and monitor centering on a real
+multi-monitor setup — then run the packaged app (`./build.sh` then the
+resulting binary) to confirm the full handoff (splash appears
+immediately, fades out once the main window is actually painted, no
+splash at all when just running from source).
+
+## 0.13.10
+
+Captured the previous change's comment convention (brief inline
+comments + a numbered `docs/comments-details.md` reference doc) as a new
+generic, project-independent instruction block:
+`claude-blocks/how-to-write-comments.claude.md`, indexed in
+`claude-blocks/README.claude.md`.
+
+**User prompt driving this change:** "What I just described (how to make
+comments), describe it as blue print to directory
+`claude-books/how-to-write-comments.claude.md` and update accompanying
+`claude-blocks/README.claude.md` file" (read as `claude-blocks/`, matching
+the existing directory and the explicitly-named accompanying README).
+
+Written generically per `claude-blocks/README.claude.md`'s "Adding a new
+block" rules: no ClientDeck-specific assumptions, language/comment-syntax
+agnostic. Covers the two-tier split (brief inline vs. numbered
+explanatory entries), the `[N]`/`docs/comments-details.md [N]` marker
+convention, judgment criteria for what counts as "explanatory" vs. what
+stays inline (incl. never extracting interface-contract docs like argv/
+exit-code/param docs), and both how to apply it to an existing codebase
+and how to maintain it going forward.
+
+## 0.13.9
+
+Every source file's long, "why"-focused explanatory comments have been
+moved out of the code and into a new `docs/comments-details.md`, leaving
+only brief "what" comments (plus a `[N]` reference pointer where the
+rationale matters) inline.
+
+**User prompt driving this change:** "create file 'comments-details.md'
+in the directory `docs`. Keep it updated. Adjust comments in the code to
+be brief description of the thing - if necessary and not clear from the
+code. Any \"explanatory\" comment move to file \"comments-details.md\".
+Mark explanaatory comments with reference number and refer on them in
+the brief comments if necessary. Goal is to make code as clean as
+possible without any lengthy comments. Do this for every source code
+file in the project. Yes I am aware it will be time / token consuming
+and I am ok with it. Don't forget to put into memory that this
+connection should be updated always when needed."
+
+`docs/comments-details.md` now holds 94 numbered entries (`[1]`–`[94]`),
+one per explanatory comment that used to live inline, grouped by source
+file in the order the files were processed: every `.py` file under
+`src/clientdeck/` and `src/scripts/`, `tools/check_versions.py`,
+`build.sh`, and every `.qml` file under `src/clientdeck/qml/`. Test files
+were reviewed too but left untouched — their existing comments were
+already brief. Each moved comment's original code site now carries a
+short "what" comment ending in `— see [N]` (or `— see docs/comments-details.md [N]`
+for the first reference in a file), pointing at the matching numbered
+entry. Verified every `[N]` used in source has a matching entry in the
+doc and vice versa (no orphaned references, no unused entries) via a
+diff of the two ID sets.
+
+Per the user's instruction, this file must be kept up to date going
+forward: any new explanatory ("why") comment added anywhere in the
+project should go into `docs/comments-details.md` as a new numbered
+entry with a brief inline pointer, not written inline in full.
+
 ## 0.13.8
 
 Both "Add client" `+` buttons (the big empty-state one and the small one

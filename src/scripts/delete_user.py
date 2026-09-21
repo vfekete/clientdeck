@@ -16,11 +16,7 @@ Exit codes:
     1   not running as root
     2   the userdel invocation failed (see stderr)
 
-MOCK_MODE: the app is currently in UI/UX-prototyping phase — this script
-does not actually delete a Linux user. It still requires root (so the real
-pkexec authentication dialog can be exercised), but the userdel step itself
-is replaced with a printed line saying what would have run. Flip MOCK_MODE
-to False once prototyping is done and real user deletion should happen.
+MOCK_MODE: see docs/comments-details.md [19].
 """
 
 from __future__ import annotations

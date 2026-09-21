@@ -11,10 +11,7 @@ import QtQuick.Window
 // a new Linux user for it, then asks (via ConfirmDialog) whether the old
 // user's content should be deleted or kept.
 //
-// A real top-level Window, not a Popup — see AddClientDialog.qml's comment
-// on why (`popupType: Popup.Window` still carries the Qt::Popup flag,
-// which window managers exempt from normal drag-to-move) and on why
-// `flags` below must match Main.qml's own exactly, not `Qt.Dialog`.
+// Real top-level Window with flags matching Main.qml — see docs/comments-details.md [40].
 Window {
     id: root
 
@@ -23,10 +20,7 @@ Window {
     property string logoPath: ""
     property bool modificationFailed: false
 
-    // Shared left column width for every field row's label, so "Logo",
-    // "Name", "Description", and "Username" line up and every input starts
-    // at the same x — a plain constant rather than a computed max-of-
-    // implicitWidths, since these four labels are fixed, known strings.
+    // Fixed constant, so every field row's label lines up — see [44].
     readonly property real fieldLabelWidth: 90 * Theme.uiScale
     readonly property real dialogPadding: 24 * Theme.uiScale
 
@@ -37,10 +31,7 @@ Window {
     width: 420 * Theme.uiScale
     height: contentColumn.implicitHeight + dialogPadding * 2
 
-    // x/y set once here, imperatively — see AddClientDialog.qml's comment
-    // on why this isn't a live binding on anchorWindow/width/height
-    // anymore (it kept recentering the dialog every time uiScale changed
-    // while open, discarding wherever the user had dragged it to).
+    // x/y set once, imperatively, not as a live binding — see [41].
     function open() {
         if (anchorWindow) {
             root.x = anchorWindow.x + (anchorWindow.width - root.width) / 2
@@ -50,10 +41,7 @@ Window {
     }
     function close() { root.visible = false }
 
-    // Called by Main.qml right before open() with the client's current
-    // values — a plain function rather than onOpened-driven reset (like
-    // AddClientDialog's) since there's no other way to get per-client data
-    // into this shared dialog instance.
+    // Plain function, not onOpened-driven reset — see [45].
     function openFor(username, name, description, logoPath) {
         root.originalUsername = username
         nameField.text = name
@@ -90,10 +78,7 @@ Window {
             anchors.margins: root.dialogPadding
             spacing: Theme.spacing
 
-            // Header: bigger logo + bold client name, so it's obvious at a
-            // glance which client this dialog is editing. Bound to the same
-            // live values the fields below edit, rather than a static
-            // snapshot, so it previews the change as you type/browse.
+            // Header preview, bound to live field values — see [46].
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing
@@ -116,19 +101,8 @@ Window {
 
             RowLayout {
                 Layout.fillWidth: true
-                // Theme.smallIconButtonSize * 2, not browseButton.height *
-                // 2 — see AddClientDialog.qml's comment on this: a
-                // Layout.preferredHeight binding reading a *sibling's*
-                // live .height turned out to be unreliable on the first
-                // layout pass specifically when the main window had other
-                // content competing for it (confirmed via headless
-                // testing). The same Theme token ThemedButton's own height
-                // already derives from sidesteps that entirely. Also set
-                // as minimumHeight — see AddClientDialog.qml's comment —
-                // since a separate, related quirk (contentColumn's own
-                // anchors.fill-derived height reading stale/negative on
-                // that same first pass) meant preferredHeight alone could
-                // still get shrunk below what was asked for.
+                // Theme-token-derived height, both preferredHeight and
+                // minimumHeight — see docs/comments-details.md [47].
                 Layout.preferredHeight: Theme.smallIconButtonSize * 2
                 Layout.minimumHeight: Theme.smallIconButtonSize * 2
                 spacing: Theme.spacing
@@ -139,9 +113,8 @@ Window {
                     font.pixelSize: Theme.fontSizeBody
                     Layout.preferredWidth: root.fieldLabelWidth
                 }
-                // Placeholder text shown until a logo is actually picked —
-                // an empty preview thumbnail read as broken/missing rather
-                // than "nothing chosen yet".
+                // Shown until a logo is picked, so an empty preview
+                // doesn't read as broken/missing.
                 Text {
                     visible: root.logoPath === ""
                     text: "No logo selected…"
@@ -151,10 +124,7 @@ Window {
                     verticalAlignment: Text.AlignVCenter
                     Layout.fillHeight: true
                 }
-                // Preview of the currently-selected logo, in place of
-                // showing its raw path — height fills the row (now twice
-                // the Browse button's own height), width follows from the
-                // image's own aspect ratio rather than being forced square.
+                // Fills the row height; width follows the image's own aspect ratio.
                 Image {
                     visible: root.logoPath !== ""
                     source: root.logoPath
@@ -220,9 +190,7 @@ Window {
                     id: usernameField
                     Layout.fillWidth: true
                     errorText: "That username or group already exists."
-                    // Keeping the same username the client already has must
-                    // not flag itself as "taken" — only a genuinely
-                    // different, already-in-use name is invalid.
+                    // The client's own current username must not self-flag as taken.
                     validator: (t) => t.trim().length > 0
                         && (t === root.originalUsername || !usernameChecker.isTaken(t))
                 }
@@ -256,12 +224,7 @@ Window {
                             root.finishUpdate(usernameField.text)
                             return
                         }
-                        // Renaming requires a new Linux user for the new
-                        // username — only proceed with the config update
-                        // (and ask about the old one's content) once that
-                        // actually succeeded, same "don't persist ahead of
-                        // reality" rule AddClientDialog follows for a
-                        // brand-new client.
+                        // Only proceed once the new user actually exists — see [43].
                         if (clientProvisioner.createLinuxUser(usernameField.text)) {
                             deleteOldContentConfirm.pendingNewUsername = usernameField.text
                             deleteOldContentConfirm.open()
@@ -283,9 +246,7 @@ Window {
 
     ConfirmDialog {
         id: deleteOldContentConfirm
-        // Centered on *this* dialog's own window, not the main window —
-        // now that dialogs are real separate windows, this reads better as
-        // appearing directly over the dialog that spawned it.
+        // Anchored to this dialog, not the main window — see [48].
         anchorWindow: root
         property string pendingNewUsername: ""
         message: "The client is being renamed to a new user. Delete the original user's content ("

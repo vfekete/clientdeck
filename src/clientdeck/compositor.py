@@ -1,35 +1,6 @@
 """Runtime desktop-compositor detection and KWin's real backdrop blur.
 
-Making the desktop *behind* a translucent window actually blurry (not
-just alpha-transparent, which is all plain QML/Qt Quick can do on its own)
-is a compositor-specific window-manager hint — there is no cross-desktop
-Qt/QML API for it:
-
-- KWin (KDE Plasma, X11) supports it directly via a documented X11
-  property, `_KDE_NET_WM_BLUR_BEHIND_REGION`, set on the app's own window.
-- Mutter (GNOME) has no equivalent per-app hint at all — real blur there
-  would need a GNOME Shell extension (a desktop-level install, not
-  something this app can do from inside itself), so the existing
-  alpha-transparency-only glass look is the best available fallback.
-- Wayland KWin uses a completely different mechanism (the
-  `org_kde_kwin_blur` Wayland protocol extension) — not implemented here;
-  everything in this module is X11-only (guard with
-  `QGuiApplication.platformName() == "xcb"` before calling in).
-
-Detection queries the *actually running* window manager via the
-ICCCM/EWMH-standard `_NET_SUPPORTING_WM_CHECK` mechanism (something any
-compliant X11 WM must implement to identify itself), rather than trusting
-environment variables like `XDG_CURRENT_DESKTOP` — those describe the
-logged-in session, which can be stale, absent, or simply wrong about
-what's actually compositing right now.
-
-Everything here is best-effort: any failure (no X11, `Xlib` unavailable,
-a WM that doesn't implement EWMH, a property-set that fails) just means
-detection/blur silently does nothing — never raises, never blocks
-startup. See CLAUDE.md's environment constraints: none of this is
-verifiable by the agent (no real X server/compositor in the sandbox), so
-it's written to be safe to call blind and needs manual, on-host
-verification against a real KWin session.
+X11/KWin-only; a no-op everywhere else. See docs/comments-details.md [11].
 """
 
 from __future__ import annotations

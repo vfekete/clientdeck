@@ -233,5 +233,11 @@ src/clientdeck/deploy_main.py
 *.dist/
 *.onefile-build/
 
+# clientdeck-loader (see src/loader/, claude-blocks/python-qt-startup-splash.claude.md)
+# — build.sh compiles this via `make -C src/loader`; both dirs are pure
+# build output, regenerated every build, never committed.
+src/loader/build/
+src/loader/generated/
+
 # VSCode (vfe: I think it is a good idea not to enforce any specific settings at all)
 .vscode/

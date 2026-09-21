@@ -1,6 +1,6 @@
 [project]
 name = "clientdeck"
-version = "0.13.8"
+version = "0.14.2"
 description = "Quick-launcher GUI for isolated per-client Linux user environments"
 requires-python = ">=3.11"
 dependencies = [

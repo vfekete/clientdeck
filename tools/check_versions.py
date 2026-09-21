@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
-"""Fails loudly on version drift before a build, per the packaging
-blueprint's Step 2 (`claude-blocks/python-single-app-instance.claude.md`):
-`pyproject.toml`'s `[project].version` and `clientdeck.__version__` must
-always agree — a packaged binary that misreports its own version is a real,
-easy-to-miss bug class.
+"""Fails loudly on pyproject.toml/__version__ drift before a build.
 
-Not part of the `clientdeck` package itself (it's a build-time-only
-concern, kept out of what actually gets shipped) — invoked directly by
-`build.sh`. On success, prints the version to stdout so the caller can
-capture it for naming the output binary.
+Build-time-only, invoked directly by build.sh. See docs/comments-details.md [20].
 """
 
 from __future__ import annotations

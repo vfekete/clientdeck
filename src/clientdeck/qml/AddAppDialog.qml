@@ -7,10 +7,7 @@ import QtQuick.Window
 // switch to manual/custom entry mode (name, command, working dir, su
 // wrapping toggle, icon).
 //
-// A real top-level Window, not a Popup — see AddClientDialog.qml's comment
-// on why (`popupType: Popup.Window` still carries the Qt::Popup flag,
-// which window managers exempt from normal drag-to-move) and on why
-// `flags` below must match Main.qml's own exactly, not `Qt.Dialog`.
+// Real top-level Window with flags matching Main.qml — see docs/comments-details.md [40].
 Window {
     id: root
 
@@ -35,10 +32,7 @@ Window {
     width: 460 * Theme.uiScale
     height: 480 * Theme.uiScale
 
-    // x/y set once here, imperatively — see AddClientDialog.qml's comment
-    // on why this isn't a live binding on anchorWindow/width/height
-    // anymore (it kept recentering the dialog every time uiScale changed
-    // while open, discarding wherever the user had dragged it to).
+    // x/y set once, imperatively, not as a live binding — see [41].
     function open() {
         manualMode = false
         discovered = desktopAppsProvider.discover()
@@ -100,11 +94,7 @@ Window {
                 onTextChanged: root.searchText = text
             }
 
-            // ScrollView (not a bare ListView) so a scrollbar actually
-            // appears when the discovered-apps list overflows the visible
-            // area — a plain ListView shows no scroll affordance at all on
-            // its own, same fix already applied to the client list in
-            // Main.qml.
+            // ScrollView, not a bare ListView, for a visible scrollbar — see [49].
             ScrollView {
                 visible: !root.manualMode
                 Layout.fillWidth: true
@@ -119,14 +109,7 @@ Window {
                         text: modelData.name
                         hoverEnabled: true
 
-                        // Full themed override rather than relying on Controls
-                        // Basic's own default background/icon/text colors, which
-                        // don't adapt to Theme.isDark at all — confirmed the hard
-                        // way as "text of items in the list is not visible on
-                        // light theme" (the default text color read fine in dark
-                        // mode but was effectively invisible against a light
-                        // Theme.surface background). Same "fully own the
-                        // rendering" approach as SquareIconButton/ValidatedTextField.
+                        // Full themed override — see docs/comments-details.md [50].
                         background: Rectangle {
                             color: appDelegate.hovered ? Theme.surfaceHover : "transparent"
                         }
@@ -134,12 +117,7 @@ Window {
                         contentItem: RowLayout {
                             spacing: Theme.spacing
 
-                            // Discovered .desktop apps' Icon= value is either an
-                            // absolute path to an image file, or an icon-theme name
-                            // to resolve via the platform's icon theme — "if
-                            // exists" per the request: an empty/unresolvable one
-                            // just shows no icon rather than a broken-image
-                            // placeholder.
+                            // Missing/unresolvable icon shows nothing — see [51].
                             Image {
                                 Layout.preferredWidth: Theme.fontSizeLarge
                                 Layout.preferredHeight: Theme.fontSizeLarge
@@ -169,9 +147,7 @@ Window {
             }
 
             RowLayout {
-                // The pick-existing view previously had no way to back out of
-                // the dialog at all besides Escape/clicking outside — the
-                // manual-entry view already has its own Cancel below.
+                // Pick-existing needs its own Cancel too — see [52].
                 visible: !root.manualMode
                 Layout.alignment: Qt.AlignRight
                 spacing: Theme.spacing
@@ -210,10 +186,7 @@ Window {
                 ValidatedTextField {
                     id: manualIcon
                     Layout.fillWidth: true
-                    // Only way to get an icon on a manually-added app (e.g.
-                    // Docker, which typically has no launchable .desktop entry
-                    // to discover an icon from) — an absolute image path or an
-                    // icon-theme name, same as a discovered app's Icon= value.
+                    // Only way to set an icon for a manual app — see [53].
                     placeholderText: "Icon name or path (optional)"
                 }
                 CheckBox {
@@ -221,9 +194,7 @@ Window {
                     text: "Run as su - <username> -c '...'"
                     checked: true
 
-                    // Same "Controls Basic doesn't adapt to Theme.isDark"
-                    // problem as everywhere else in this dialog — themed
-                    // indicator + label rather than the default look.
+                    // Same theming issue/fix as the ItemDelegate above — see [50].
                     contentItem: Text {
                         text: manualUseSu.text
                         color: Theme.textPrimary

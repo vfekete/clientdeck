@@ -2,19 +2,14 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-// Generic, reusable themed tooltip — a small glass panel showing a title
-// and optional description, meant to replace the default OS/Basic-style
-// tooltip anywhere hover info is needed (not just the client logo), per
-// CLAUDE.md's "consistent dark theme" requirement.
+// Generic, reusable themed tooltip. See docs/comments-details.md [34].
 Popup {
     id: root
 
     property alias title: titleText.text
     property alias description: descriptionText.text
 
-    // Positioned by the caller (via `parent` + x/y), shown/hidden purely
-    // by binding `visible` to a HoverHandler — never grabs focus or
-    // participates in click-to-dismiss like a real Popup normally would.
+    // Purely hover-driven, not a normal interactive Popup — see [35].
     focus: false
     modal: false
     closePolicy: Popup.NoAutoClose

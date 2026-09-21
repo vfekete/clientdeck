@@ -51,10 +51,7 @@ def _parse_desktop_file(path: Path) -> DesktopApp | None:
     if "Desktop Entry" not in parser:
         return None
     section = parser["Desktop Entry"]
-    # Type= is a required key per the Desktop Entry Specification — no
-    # lenient default for a missing one. A previous version defaulted a
-    # missing Type to "Application", which admitted malformed/non-standard
-    # entries a strict reading of the spec would reject.
+    # Required key, no lenient default — see [14].
     if section.get("Type") != "Application":
         return None
     if section.get("NoDisplay", "false").strip().lower() == "true":

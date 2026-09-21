@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
-# Packages ClientDeck into a single-file executable.
-#
-# Implements claude-blocks/python-single-app-instance.claude.md for this
-# project: a PySide6/Qt GUI app, built via `pyside6-deploy` (which drives
-# Nuitka's --onefile mode under the hood). Run with zero arguments; output
-# lands at dist/clientdeck-<version> (no extension, chmod +x).
-#
-# This is a one-time-setup script per CLAUDE.md's "Deployment / packaging"
-# section: once it works, extend it for new needs (e.g. a new bundled asset
-# directory) rather than regenerating it from the blueprint from scratch.
+# Packages ClientDeck into a single-file executable. See docs/comments-details.md [21].
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,7 +16,7 @@ VERSION="$(uv run python tools/check_versions.py)"
 echo "    version: $VERSION"
 
 echo "==> Checking required assets"
-for asset in resources/app_icon.png src/clientdeck/qml/Main.qml src/scripts/launch_as_user.py src/scripts/create_user.py; do
+for asset in resources/app_icon.png resources/splash_screen.png src/clientdeck/qml/Main.qml src/scripts/launch_as_user.py src/scripts/create_user.py; do
   if [[ ! -f "$asset" ]]; then
     echo "error: required asset missing: $asset" >&2
     exit 1
@@ -43,27 +34,27 @@ mkdir -p "$DIST_DIR"
 echo "==> Installing the (isolated, build-only) packaging dependency group"
 uv sync --group build
 
+echo "==> Building clientdeck-loader (see src/loader/, claude-blocks/python-qt-startup-splash.claude.md)"
+make -C "$REPO_ROOT/src/loader"
+LOADER_BIN="$REPO_ROOT/src/loader/build/clientdeck-loader"
+if [[ ! -f "$LOADER_BIN" ]]; then
+  echo "error: expected loader binary not found at $LOADER_BIN" >&2
+  exit 1
+fi
+
 OUTPUT_NAME="${APP_NAME}-${VERSION}"
 
 echo "==> Generating pysidedeploy.spec (auto-detects QML files/Qt modules)"
 uv run pyside6-deploy "$ENTRY_POINT" --init -f
 
-echo "==> Patching spec: title, icon, output dir, and bundling src/scripts/"
-# src/scripts/ is a sibling of src/clientdeck/, not a subdirectory of it, so
-# pyside6-deploy's own auto-bundling (which only picks up subdirectories
-# next to the entry point, e.g. qml/) never sees it — it must be added
-# explicitly, or app.paths.get_scripts_dir() finds nothing once packaged.
-#
-# Uses --include-raw-dir, not --include-data-dir: Nuitka's --include-data-dir
-# silently *excludes* .py files by default (it treats them as source, not
-# data) and src/scripts/ contains only .py files — confirmed by actually
-# building with --include-data-dir first: Nuitka logged "No data files in
-# directory '.../src/scripts'" and the scripts were silently left out
-# entirely. --include-raw-dir bundles the directory's contents verbatim.
+echo "==> Patching spec: title, icon, output dir, and bundling src/scripts/ + clientdeck-loader"
+# --include-raw-dir for src/scripts/ — see docs/comments-details.md [22].
+# --include-data-files for clientdeck-loader: a single file, not a
+# directory, so --include-data-dir/--include-raw-dir don't apply — see [16].
 sed -i "s|^title = .*|title = ${OUTPUT_NAME}|" "$SPEC_FILE"
 sed -i "s|^exec_directory = .*|exec_directory = ${DIST_DIR}|" "$SPEC_FILE"
 sed -i "s|^icon = .*|icon = ${REPO_ROOT}/resources/app_icon.png|" "$SPEC_FILE"
-sed -i "s|^extra_args = .*|extra_args = --quiet --noinclude-qt-translations --include-raw-dir=${REPO_ROOT}/src/scripts=./scripts|" "$SPEC_FILE"
+sed -i "s|^extra_args = .*|extra_args = --quiet --noinclude-qt-translations --include-raw-dir=${REPO_ROOT}/src/scripts=./scripts --include-data-files=${LOADER_BIN}=./clientdeck-loader|" "$SPEC_FILE"
 
 echo "==> Running pyside6-deploy (Nuitka onefile build — this takes a while)"
 uv run pyside6-deploy "$ENTRY_POINT" -c "$SPEC_FILE" -f

@@ -50,3 +50,14 @@ def test_packaged_qml_and_scripts_dirs_are_siblings_of_root(monkeypatch, tmp_pat
 
     assert paths.get_qml_dir() == tmp_path / "qml"
     assert paths.get_scripts_dir() == tmp_path / "scripts"
+
+
+def test_source_checkout_loader_path_is_under_src_loader_build():
+    assert paths.get_loader_path() == Path(paths.__file__).resolve().parent.parent / "loader" / "build" / "clientdeck-loader"
+
+
+def test_packaged_loader_path_is_sibling_of_root(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys.modules["__main__"], "__compiled__", SimpleNamespace(), raising=False)
+    monkeypatch.setattr(builtins, "__nuitka_binary_dir", str(tmp_path), raising=False)
+
+    assert paths.get_loader_path() == tmp_path / "clientdeck-loader"
