@@ -5,7 +5,8 @@ import QtQuick.Dialogs
 import QtQuick.Window
 
 // Themed "add customer" dialog: logo, name, description, username-to-create
-// (live-validated against the system's existing users/groups).
+// (an already-existing username is confirmed with the user at submit
+// time, not flagged live — see [119]).
 //
 // Real top-level Window (not Popup); `flags` must match Main.qml's own
 // exactly. See docs/comments-details.md [40].
@@ -46,6 +47,35 @@ Window {
         usernameField.touched = false
         root.logoPath = ""
         creationFailed = false
+    }
+
+    // Entry point for the "Add" button — see [119].
+    function submitAdd() {
+        root.creationFailed = false
+        if (usernameChecker.isTaken(usernameField.text)) {
+            useExistingUserConfirm.open()
+            return
+        }
+        root.createNewUserAndAddClient()
+    }
+
+    // Only persist once user creation succeeds — see [43].
+    function createNewUserAndAddClient() {
+        if (clientProvisioner.createLinuxUser(usernameField.text)) {
+            root.addClientEntry()
+        } else {
+            root.creationFailed = true
+        }
+    }
+
+    // No user creation at all — the account already exists — see [119].
+    function useExistingUserAndAddClient() {
+        root.addClientEntry()
+    }
+
+    function addClientEntry() {
+        clientModel.addClient(nameField.text, descriptionField.text, usernameField.text, root.logoPath)
+        root.close()
     }
 
     Shortcut {
@@ -128,8 +158,11 @@ Window {
                 id: usernameField
                 Layout.fillWidth: true
                 placeholderText: "Username to create"
-                errorText: "That username or group already exists."
-                validator: (t) => t.trim().length > 0 && !usernameChecker.isTaken(t)
+                errorText: "Username is required."
+                // An already-taken username is no longer flagged here as
+                // invalid — see [119]: confirmed with the user at submit
+                // time instead, via useExistingUserConfirm below.
+                validator: (t) => t.trim().length > 0
             }
 
             Text {
@@ -153,16 +186,7 @@ Window {
                     text: "Add"
                     enabled: nameField.text.length > 0 && nameField.isValid
                         && usernameField.text.length > 0 && usernameField.isValid
-                    onClicked: {
-                        // Only persist once user creation succeeds — see [43].
-                        root.creationFailed = false
-                        if (clientProvisioner.createLinuxUser(usernameField.text)) {
-                            clientModel.addClient(nameField.text, descriptionField.text, usernameField.text, root.logoPath)
-                            root.close()
-                        } else {
-                            root.creationFailed = true
-                        }
-                    }
+                    onClicked: root.submitAdd()
                 }
             }
         }
@@ -173,5 +197,16 @@ Window {
         title: "Choose logo image"
         nameFilters: ["Images (*.png *.jpg *.jpeg *.svg)"]
         onAccepted: root.logoPath = selectedFile.toString().replace("file://", "")
+    }
+
+    // Anchored to this dialog, not the main window — same reasoning as [48].
+    ConfirmDialog {
+        id: useExistingUserConfirm
+        anchorWindow: root
+        message: "A Linux user or group named \"" + usernameField.text
+            + "\" already exists. Use it as this client's account?"
+        confirmLabel: "Use existing"
+        cancelLabel: "Cancel"
+        onConfirmed: root.useExistingUserAndAddClient()
     }
 }

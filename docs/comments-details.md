@@ -548,6 +548,28 @@ doesn't exist. `EditClientDialog.qml` follows the same rule on rename:
 the config update (and the "delete old content?" prompt) only happens
 once the new user was actually created.
 
+### [119] Why an already-taken username is confirmed at submit time, not flagged live as an error
+
+Per explicit user request: a username/group that already exists on the
+system is no longer treated as an invalid value on the "add client"
+form — it's a legitimate choice (attach this client to an existing
+Linux account instead of provisioning a new one), so the live-typed
+field no longer red-flags it via `usernameChecker.isTaken()` in its
+validator (that check now only guards against an empty value, same
+shape as `nameField`'s own validator).
+
+Instead, `submitAdd()` (the "Add" button's handler) checks
+`usernameChecker.isTaken()` once, at submission: if taken, it opens
+`useExistingUserConfirm` (a `ConfirmDialog`) asking whether to use that
+existing account, rather than calling `clientProvisioner.createLinuxUser()`
+at all — confirming "Use existing" goes straight to
+`useExistingUserAndAddClient()` → `addClientEntry()`, skipping user
+creation entirely, so no `pkexec`/`create_user.py` invocation happens
+for this path. Cancelling leaves the dialog open with nothing changed,
+so the user can pick a different username instead. If the username
+isn't taken, behavior is unchanged from before: create the Linux user
+first, only persist the client if that succeeds (see [43]).
+
 ## src/clientdeck/qml/EditClientDialog.qml
 
 ### [44] Why `fieldLabelWidth` is a fixed constant
@@ -1336,3 +1358,25 @@ Building the loader via `make` on every run (rather than requiring it
 pre-built) is cheap: `make` no-ops once the binary is already up to
 date, so this only costs real time the first run or after `main.c`
 changes.
+
+## run-loader.sh
+
+### [120] Why this script behaves differently from `run.sh` in two ways
+
+Exists solely for manually previewing/tuning the splash by itself (per
+the blueprint's own verification checklist: "run standalone with no
+channel/env var set"), so it deliberately diverges from `run.sh` (see
+[116]) in two ways:
+
+- **`exec`, not a foreground command + cleanup trap**: there's nothing
+  to clean up here — no backgrounded loader process, no temp socket
+  directory (this script never sets `CLIENTDECK_LOADER_SOCKET` at all,
+  which is exactly what puts the loader into standalone mode — see
+  [106]) — so `exec`'ing straight into the loader binary is safe and
+  simpler, unlike `run.sh`'s reasons for avoiding it.
+- **A loader build failure is not swallowed**: `run.sh` treats a failed
+  `make -C src/loader` as "fine, just run with no splash" (see [112]),
+  because there the app is the point and the splash is optional. Here
+  the loader *is* the point of running the script at all, so `set -e`
+  is left to propagate `make`'s failure (and its own error output)
+  rather than silently doing nothing.

@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.15.1
+
+New `run-loader.sh`: builds and runs `clientdeck-loader` standalone (no
+app, no socket) for manual visual testing/tuning of the splash by
+itself.
+
+**User prompt driving this change:** "add new script which starts only
+loader (for manual testung). name it `run-loader.sh`"
+
+Unlike `run.sh`, it `exec`'s straight into the loader binary (nothing to
+clean up — no backgrounded process, no temp socket dir, since this
+script never sets `CLIENTDECK_LOADER_SOCKET`, which is exactly what puts
+the loader in standalone mode) and lets a `make -C src/loader` failure
+propagate instead of silently falling back to "no splash" — the loader
+build failing is the whole point of running this script, not something
+to swallow. See docs/comments-details.md [120].
+
+Verified `make -C src/loader` actually builds successfully in this
+sandbox this time — `libx11-dev`/`libxinerama-dev` are now present here
+(they weren't for 0.14.0/0.14.1/0.14.2's work), so this is now a real
+compiled-and-linked binary, not just a syntax check. The script itself
+was **not** executed to verify end-to-end — see the note below.
+
+**Incident during this change, and a standing note going forward**:
+while adding this script, it was run directly once to "confirm it
+works," which — since it `exec`'s into the real loader binary with no
+headless mode — very likely popped an actual splash window on the
+user's screen for several seconds. `DISPLAY`/X11 sockets being present
+in this environment turned out to mean a live, real display (accessed
+via XWayland; the user's session is Wayland, not X11), not a safe
+virtual/sandboxed one — exactly what CLAUDE.md's "Environment
+constraints" section exists to prevent the agent from touching. Flagged
+to the user, and saved to memory: never execute a GUI-launching
+binary/script here to verify it, regardless of what `DISPLAY`/socket
+state looks like; stick to compiling/building and reading code instead.
+This doesn't change anything in the codebase itself — noted here as
+process, not a product change.
+
+## 0.15.0
+
+"Add client": an already-existing Linux username/group is no longer a
+blocking validation error — it's now offered as a choice (use the
+existing account, or pick another username), with no new user created
+if the existing one is chosen.
+
+**User prompt driving this change:** "when new client is added and user
+existence is checked, instead of error in case of positive find, inform
+user that such account already exists and whether he still wants to use
+it. In that case no user will be created (no add-user script is
+needed)"
+
+`AddClientDialog.qml`'s username field no longer red-flags an
+already-taken username live as you type (its validator now only checks
+for non-empty, same shape as the `Name` field's). Clicking "Add" checks
+`usernameChecker.isTaken()` once, at submission: if taken, a themed
+`ConfirmDialog` ("Use existing" / "Cancel") asks whether to attach this
+client to the existing account; confirming adds the client directly with
+no `clientProvisioner.createLinuxUser()` call at all (so no
+`pkexec`/`create_user.py` invocation for this path), cancelling leaves
+the dialog open so a different username can be picked instead. An
+unclaimed username still goes through the original flow unchanged:
+create the Linux user first, only persist the client if that succeeds.
+See docs/comments-details.md [119].
+
+Scoped to "add client" only, per the request — `EditClientDialog.qml`'s
+rename flow still treats a taken username as a blocking validation
+error (its own confirm dialog is for the separate "delete the old
+account's content?" question, not this one). Updated CLAUDE.md's "Adding
+a client" section to match, since it documented the now-superseded
+live-error behavior as the product spec.
+
+Verified via a headless (`QT_QPA_PLATFORM=offscreen`) full-app smoke run
+(confirms the new QML parses/binds cleanly — no syntax or binding
+errors) and brace-balance check; no Python-side changes, so all 131
+tests pass unchanged. The actual dialog flow (opening the confirm
+dialog, both button paths) hasn't been visually exercised — needs
+on-host manual verification: try adding a client with a username that
+already exists on the system, confirm both "Use existing" (client gets
+added, no polkit prompt) and "Cancel" (dialog stays open) work as
+expected.
+
 ## 0.14.2
 
 Loader now displays at 25% of the target monitor's height (instead of
