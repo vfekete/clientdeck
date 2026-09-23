@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.15.3
+
+The icon hover-grow effect from 0.15.2 is now an instant snap, not
+animated.
+
+**User prompt driving this change:** "hmm ok I just tried it, it works
+but does not look as good as I expected it. Keep the growing effect but
+remove animation purt, just change it on mouse hover in / out"
+
+Removed the `Behavior on width`/`Behavior on height` pair from
+`SquareIconButton.qml`'s icon `Image` (added in 0.15.2); the
+`iconHoverGrow` size change itself is unchanged, it just now applies
+immediately on `mouseArea.containsMouse` toggling instead of easing over
+250ms. See docs/comments-details.md [122]. Saved to memory: this user
+tried an animated version of a hover-triggered size change and preferred
+instant — don't assume every future hover/micro-interaction addition
+should default to an animated `Behavior` just because sibling properties
+on the same component (`color`, `opacity`) already have one.
+
+Verified via a headless (`QT_QPA_PLATFORM=offscreen`) smoke run and a
+brace-balance check; all 131 tests pass (no Python-side changes).
+
+## 0.15.2
+
+App icon buttons now grow slightly (a few pixels) on hover, animated,
+instead of jumping straight to their hover color with no size change.
+
+**User prompt driving this change:** "create this effect: when I hover
+over a button with icon, make that icon a little bit bigger (2 - 4
+pixels max), when I hover out make it normal and make this effect
+animated in 250ms so it is not sharp jump"
+
+`SquareIconButton.qml`'s icon `Image` switched from `anchors.fill` +
+`anchors.margins` to `anchors.centerIn` + explicit `width`/`height`
+(needed so `Behavior` can animate it directly), growing by a new
+`iconHoverGrow` (3px, scaled by `Theme.uiScale`) while
+`mouseArea.containsMouse`, animated over a fixed 250ms — deliberately in
+pixels via width/height rather than a `scale` factor, so the same small
+growth applies consistently across every button size this component is
+used at (a toolbar icon and the huge "add client" icon would grow very
+differently under the same `scale` value). Scoped to the image icon
+only, per "a button with icon" — the letter/glyph labels (initials,
+`+`/`-`/reset, theme toggle) and the trash-bin glyph are unaffected. See
+docs/comments-details.md [121].
+
+Verified via a headless (`QT_QPA_PLATFORM=offscreen`) full-app smoke run
+(exercises this component's bindings with no binding/type errors) and a
+brace-balance check; all 131 tests pass (no Python-side changes). The
+actual hover feel (whether 3px/250ms reads as intended) needs the
+user's own on-host check, same as other visual/animation changes in this
+project — not something verifiable here.
+
 ## 0.15.1
 
 New `run-loader.sh`: builds and runs `clientdeck-loader` standalone (no

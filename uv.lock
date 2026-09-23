@@ -4,7 +4,7 @@ requires-python = ">=3.11"
 
 [[package]]
 name = "clientdeck"
-version = "0.15.1"
+version = "0.15.3"
 source = { editable = "." }
 dependencies = [
     { name = "pyside6" },

@@ -1022,6 +1022,39 @@ blink frame that's currently *showing* the armed look) — a tooltip
 fighting for attention with the ghost or the trash-bin icon would just
 be noise.
 
+### [121] Why the hover-grow effect sizes the icon in pixels, not via `scale`
+
+Per explicit user request: "make that icon a little bit bigger (2 - 4
+pixels max)." A `scale` transform would grow the icon by a *factor* of
+its current size, so the same scale value produces a very different
+pixel growth on a small toolbar icon (`Theme.smallIconButtonSize`)
+versus a huge one (`Theme.hugeIconButtonSize`) — inconsistent with
+"2-4 pixels" as an absolute, consistently subtle amount across every
+button size this component is used at. Growing the explicit
+`width`/`height` by a fixed `iconHoverGrow` (3px, scaled by
+`Theme.uiScale` so it stays proportionate at any zoom level — same
+reasoning as every other literal-pixel constant in Theme.qml) instead
+keeps the effect the same small size everywhere. This also needed
+switching the `Image` from `anchors.fill: parent` + `anchors.margins` to
+`anchors.centerIn` + explicit `width`/`height`, since a conditional
+value is easiest to express directly on those.
+
+Only applied to the `Image` (real icon), not the label `Text` glyph
+(letter initials, `+`/`-`/reset, theme toggle) or the trash-bin glyph —
+scoped to "a button with icon" as asked, not every SquareIconButton use.
+
+### [122] Why the hover-grow effect is instant, not animated
+
+First implemented with a `Behavior`-driven animation (250ms, per the
+original request), then explicitly reverted to an instant snap per
+direct user feedback after trying it on-host: "it works but does not
+look as good as I expected it. Keep the growing effect but remove
+animation p[a]rt, just change it on mouse hover in / out." Every other
+animated property on this component (`color`, `opacity`) keeps its
+`Behavior`; this one specifically doesn't — don't reintroduce a
+`Behavior on width`/`height` here without the user asking for it again,
+since removing it was a deliberate correction, not an oversight.
+
 ## src/loader/gen_splash_header.py
 
 ### [95] Why the splash image is baked into a C header at build time, via this script

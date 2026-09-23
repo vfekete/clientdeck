@@ -90,11 +90,16 @@ Rectangle {
     Behavior on color { ColorAnimation { duration: Theme.animationDuration } }
     Behavior on opacity { NumberAnimation { duration: Theme.animationDuration } }
 
+    // Grows by a few px on hover, not a scale factor — see [121].
+    // Unanimated (instant snap on hover in/out) — see [122].
+    readonly property real iconHoverGrow: 3 * Theme.uiScale
+
     // Fills the button (minus a themed margin) rather than a small fixed
     // size centered in the middle.
     Image {
-        anchors.fill: parent
-        anchors.margins: Theme.iconMargin
+        anchors.centerIn: parent
+        width: (parent.width - Theme.iconMargin * 2) + (mouseArea.containsMouse ? root.iconHoverGrow : 0)
+        height: (parent.height - Theme.iconMargin * 2) + (mouseArea.containsMouse ? root.iconHoverGrow : 0)
         visible: root.iconSource !== "" && !root.visualArmed
         source: root.iconSource
         fillMode: Image.PreserveAspectFit
