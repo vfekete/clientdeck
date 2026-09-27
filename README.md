@@ -1,8 +1,7 @@
 # ClientDeck
 
 <p align="center">
-  <img src="docs/cd-dark.png" width="49%" alt="ClientDeck, dark theme" />
-  <img src="docs/cd-light.png" width="49%" alt="ClientDeck, light theme" />
+  <img src="docs/cd-hero.png" width="90%" alt="ClientDeck, dark and light theme, with the startup splash centered over both" />
 </p>
 
 ClientDeck exists to solve one problem: keeping several clients' work cleanly

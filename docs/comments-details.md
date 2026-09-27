@@ -503,6 +503,74 @@ dialog is reopened.
 
 `ConfirmDialog.qml` does the same for the same reason.
 
+### [123] Dialogs aren't independently draggable on Wayland — why, and why it's left as-is for now
+
+History: 0.13.1 made every dialog a real `Window` (not `Popup`); 0.13.2
+then fixed "dragging the dialog via Meta+mouse-down moves the *main*
+window instead" by switching each dialog's `flags` from `Qt.Dialog |
+Qt.FramelessWindowHint` to the exact same `Qt.FramelessWindowHint |
+Qt.Window` `Main.qml` itself uses — root-caused at the time to Mutter
+(GNOME, **on X11** — this project's target environment per CLAUDE.md at
+that point) bundling a `Qt::Dialog`-flagged transient window with its
+parent for WM-level move operations. That fix was verified working, but
+only ever verified under X11: 0.13.1/0.13.2's own verification notes
+both explicitly flag "not independently verifiable in this sandbox...
+needs a real X/Wayland session... please confirm on your end," and the
+confirmation that came back was from an X11 session.
+
+The user later reported the *exact same symptom* again — "add client"/
+"add application" not independently movable, the whole app moving
+instead — after switching to testing on Wayland (see
+[[current-env-wayland]] in memory). Since the `flags` fix from 0.13.2 is
+still fully in place (confirmed unchanged, all four dialogs still read
+`Qt.FramelessWindowHint | Qt.Window`) and the mechanism it fixed
+(X11 window-manager-level bundling via the `Qt::Dialog` type hint)
+doesn't even exist under Wayland's protocol, this isn't a regression of
+that fix — it's the same *visible* symptom resurfacing via a *different*,
+Wayland-specific cause that was never diagnosed before, because nobody
+had exercised this drag-to-move path on Wayland until now.
+
+**First hypothesis, disproven**: that GNOME/Mutter's Wayland Super+drag
+gesture targets the currently *activated/focused* toplevel rather than
+whatever's under the pointer, and a newly-shown dialog wasn't reliably
+getting Wayland surface activation. Added `Window.requestActivate()` to
+every dialog's `open()` to test this — confirmed by the user not to fix
+it.
+
+**Second hypothesis, likely the real explanation**: Wayland's
+`xdg_toplevel` protocol has no client-side "set my absolute screen
+position" request at all (unlike X11, where setting a window's `x`/`y`
+directly places it) — only the compositor places toplevels. Every dialog
+here explicitly sets `root.x`/`root.y` to center itself over
+`anchorWindow` (see [41]). It's plausible Qt's Wayland backend maps a
+window that both has a `transientParent` *and* needs explicit
+parent-relative positioning honored as an `xdg_popup` (which — unlike
+`xdg_toplevel` — supports positioner-based placement relative to a
+parent surface) rather than a plain `xdg_toplevel`. `xdg_popup`s don't
+participate in normal window management at all, by protocol design: no
+independent Alt-Tab/window-switcher entry, no independent interactive
+move. **Supporting evidence, confirmed by the user**: the "Add client"
+dialog does *not* appear as its own entry in GNOME's Alt-Tab/Activities
+overview under Wayland while open — exactly what `xdg_popup` (non-toplevel)
+treatment would produce, and hard to explain otherwise.
+
+**Deliberately left as-is for now** — per explicit user decision ("not
+that crucial at the moment, let's keep it as it is") after being asked
+which tradeoff they'd want: keep exact centering and accept
+non-draggability on Wayland (current behavior, kept), vs. drop the
+explicit `anchorWindow`-relative positioning so the compositor places
+the dialog as a real independent/draggable toplevel instead (likely
+losing precise centering — Wayland toplevels don't get to choose where
+they land). If this gets revisited: that's the concrete tradeoff to
+implement, gated on detecting Wayland at runtime (`app.platformName()`
+in `app.py`, already used for the X11-only blur hint — see [10] — is the
+existing precedent for exposing platform to QML if needed). Not
+something to silently attempt again without the user opting into that
+tradeoff, since it's a real behavior change, not a pure bugfix.
+`requestActivate()` itself was left in place (harmless on every
+platform, and independently reasonable so a newly opened dialog has
+keyboard focus) even though it didn't resolve this specific issue.
+
 ### [42] Why the logo row height is set via a Theme token, and as both `preferredHeight` and `minimumHeight`
 
 `Theme.smallIconButtonSize * 2`, not `browseButton.height * 2`: a

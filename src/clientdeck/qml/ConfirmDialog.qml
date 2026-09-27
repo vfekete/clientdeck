@@ -33,6 +33,8 @@ Window {
             root.y = anchorWindow.y + (anchorWindow.height - root.height) / 2
         }
         root.visible = true
+        // Explicit activation request — see [123].
+        root.requestActivate()
     }
     function close() { root.visible = false }
 

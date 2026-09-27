@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.15.4
+
+Candidate (unverified) fix for dialogs still not dragging independently
+via Meta/Super+mouse-down — this time on Wayland.
+
+**User prompt driving this change:** "ok and the fact that the 'add
+client' and 'add application' are not windows on their own (I cannot
+move them, entier app is moved). I believed 2 - 3 versions ago this was
+already fixed, is it a regression?"
+
+**Not a regression**: 0.13.2's fix (every dialog's `flags` set to
+`Qt.FramelessWindowHint | Qt.Window`, matching `Main.qml`, to stop
+Mutter bundling a `Qt::Dialog`-flagged transient window's move with its
+parent) is still fully in place, unchanged, confirmed by reading all
+four dialog files. But that fix was root-caused and verified only under
+X11 — 0.13.1/0.13.2's own verification notes explicitly flagged
+drag-to-move as unconfirmed in the sandbox at the time, and the
+confirmation that came back was from an X11 session. The X11 mechanism
+that fix addressed doesn't exist under Wayland's protocol at all, and
+this exact drag-to-move path had never actually been tested on Wayland
+until now (the user only started testing there recently). So: same
+symptom, new platform, a cause nobody had diagnosed yet — not code that
+regressed.
+
+Added `root.requestActivate()` to every dialog's `open()`
+(`AddClientDialog`, `AddAppDialog`, `EditClientDialog`, `ConfirmDialog`),
+right after `root.visible = true` — an unverified candidate fix, on the
+hypothesis that GNOME/Mutter's Wayland Super+drag gesture targets the
+currently *activated* toplevel rather than whatever's under the pointer,
+and a newly-shown secondary window may not automatically receive Wayland
+surface activation the way X11 window managers tend to auto-focus new
+windows. See docs/comments-details.md [123] for the full writeup,
+including what to check next on-host if this doesn't resolve it.
+
+**Verification**: confirmed `Window.requestActivate()` is a valid,
+crash-safe QML call even under `QT_QPA_PLATFORM=offscreen` (a minimal
+standalone repro), and a full headless app smoke run still loads with no
+QML errors. **Cannot verify the actual fix** — WM-level drag-to-move
+semantics need a real Wayland session, which this sandbox cannot provide
+right now (see the standing Wayland note: no GUI execution here at all).
+All 131 tests pass (no Python-side changes). Please test on your end and
+report back, same as the 0.13.1/0.13.2 X11 round.
+
 ## 0.15.3
 
 The icon hover-grow effect from 0.15.2 is now an instant snap, not
