@@ -1,3 +1,3 @@
 """ClientDeck: quick-launcher for isolated per-client Linux user environments."""
 
-__version__ = "0.15.4"
+__version__ = "0.1.0+feat.properties"

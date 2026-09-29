@@ -14,7 +14,6 @@ RowLayout {
     property var apps: []
 
     signal launchApp(int appIndex)
-    signal removeAppRequested(int appIndex)
     signal moveAppRequested(int fromIndex, int toIndex)
     signal addAppRequested()
     signal editRequested()
@@ -101,7 +100,6 @@ RowLayout {
                 required property int index
                 required property var modelData
 
-                deletable: true
                 draggable: true
                 ghosted: appButton.index === appsContainer.draggedIndex
 
@@ -132,7 +130,6 @@ RowLayout {
                 tooltipText: modelData.name
 
                 onClicked: root.launchApp(appButton.index)
-                onDeleteRequested: root.removeAppRequested(appButton.index)
 
                 onDragStarted: {
                     appsContainer.draggedIndex = appButton.index

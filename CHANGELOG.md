@@ -1,5 +1,116 @@
 # Changelog
 
+## 0.1.0+feat.properties
+
+New rule: versioning is now per-branch. `main` keeps plain `X.Y.Z`; every
+other branch versions independently starting at `0.1.0`, with the branch
+name folded into the version as a PEP 440 local-version segment
+(`X.Y.Z+<branch-slug>`). This branch (`feat/properties`) resets to
+`0.1.0+feat.properties` as of this entry — its version no longer
+continues from wherever `main` was (`0.16.0`).
+
+**User prompt driving this change:** "now we are in a different branch
+(not master), so let's add another rule: - separate versioning for every
+branch. - only master version is made out of numbers and dots. - every
+non-master branch starts with branch name followed by version, so in
+case of this branch it is: feat/properties-0.1.0"
+
+The literal requested format (`feat/properties-0.1.0`) isn't usable:
+`pyproject.toml`'s `version` must be PEP 440-valid (enforced by
+`hatchling`/`uv` — confirmed by trying `uv sync` with it, which rejects
+it), and PEP 440 has no `/` and no arbitrary prefix-before-the-number at
+all. Asked the user to pick between the PEP 440-compliant local-version
+form, a non-compliant-but-plainer-looking string (which would've forced
+`pyproject.toml` and the display version to diverge in format), or
+keeping the canonical version field branch-agnostic entirely; they chose
+the PEP 440 local version — confirmed both against PEP 440's own
+canonical regex and by actually running `uv sync` with
+`0.1.0+feat.properties`, which installed cleanly as
+`clientdeck==0.1.0+feat.properties`.
+
+Also: the user said "master," but this repo's actual primary branch is
+named `main` (`origin/HEAD -> origin/main`, confirmed via `git
+symbolic-ref`) — used `main` as `check_versions.py`'s `MAIN_BRANCH`
+rather than the literal word "master," which would never have matched.
+
+`tools/check_versions.py` gained `slugify_branch()` (collapses every run
+of non-alphanumeric characters to a single `.`), `get_current_branch()`
+(best-effort via `git rev-parse --abbrev-ref HEAD`; `None` — not
+raised — on a detached HEAD or missing git, with an injectable `runner`
+for testing), and `check_branch_version()` (the actual rule: plain
+version required on `main`, `+<expected slug>` required everywhere else,
+`SystemExit` with both the expected and actual version on any mismatch —
+same shape as the existing `check_versions_match()`). Wired into
+`main()` right after the existing pyproject/`__version__` check; skipped
+entirely if the branch can't be determined, since an otherwise-valid
+build shouldn't fail just because branch detection isn't possible in
+some context. See docs/comments-details.md [124]. Documented the rule in
+CLAUDE.md's "Versioning & changelog" section.
+
+14 new tests in `tests/tools/test_check_versions.py` (`slugify_branch`
+cases, `check_branch_version` accept/reject on both `main` and other
+branches, `get_current_branch` for a normal branch/detached
+HEAD/missing-git/failing-git via the injectable runner, plus a
+`test_real_repo_branch_version_is_consistent` guard mirroring the
+existing real-repo consistency test). All 145 tests pass. Also ran
+`tools/check_versions.py` directly (build.sh's actual invocation path) —
+prints `0.1.0+feat.properties`, exit 0.
+
+## 0.16.0
+
+Removed the "remove app" (press-and-hold-to-arm, then click, trash-bin)
+behavior from app buttons entirely. A plain left-click, which launches
+the app, is now the button's only interaction.
+
+**User prompt driving this change:** "first I want you to get rid of
+'remove app' behavior. and keep just click (with left mouse button)
+that includes: - remove code for blinking and changin icon and color -
+remove handler for deletion from the list - remove the icon from the
+resources but keep the file itself - only normal click remains which
+launches the app"
+
+`SquareIconButton.qml`: removed `deletable`, `armedForDelete`,
+`cancelsOtherArmedButton`, the hold-timeline `Timer`/blink-state
+properties, the trash-bin glyph `Text`, and the color/icon switching
+that depended on them. `onPressed`/`onReleased`/`onExited` simplified
+back down to just click detection + the (unrelated, kept) drag gesture.
+`ClientRow.qml`: removed `deletable: true` and the `removeAppRequested`
+signal/handler wiring on the per-app delegate. `Main.qml`: removed the
+Escape-disarms-delete `Shortcut`, the background-click-disarms
+`MouseArea`, and `cancelsOtherArmedButton: false` on the theme-toggle
+button — all three existed solely to support the arm/disarm gesture.
+Deleted `DeleteArmState.qml` (the singleton that tracked which button
+was armed app-wide) outright, since removing every caller left it with
+no purpose at all, and removed its `qmldir` registration.
+
+`clientModel.removeAppFromClient()` (`models.py`) and
+`ConfigStore.remove_app()` (`config.py`) were deliberately left in
+place, along with their tests — "remove handler for deletion from the
+list" read as the QML-level event wiring specifically, not the
+underlying (generic, reusable, already-tested) data-layer capability;
+nothing in the QML layer calls either anymore, but they're harmless,
+independently-tested code, not something removing was asked for.
+
+"Remove the icon from the resources but keep the file itself": there
+was never an actual trash-icon *image file* (the trash-bin was always
+just the "🗑" Unicode glyph, confirmed by searching `resources/` and the
+whole repo) — read as docs/comments-details.md [85] ("Why the trash-bin
+glyph is 2x size") and its neighboring delete-specific entries ([32],
+[67], [77], [79]-[81], [85]-[86], [88]-[92]): removed now that the code
+they explained is gone, per the established convention, while obviously
+keeping `comments-details.md` itself (it documents plenty else). Updated
+CLAUDE.md's "Main window" spec bullet to match (plain click only, no
+press-and-hold).
+
+Verified headlessly: brace-balance checks on every edited QML file, a
+full `QT_QPA_PLATFORM=offscreen` smoke run of `app.run()` with a seeded
+config containing a real client + app (exercising `ClientRow`'s
+`SquareIconButton` delegate directly, not just the empty state) — no QML
+binding/parse errors either way. All 131 tests pass (no Python-side
+logic changed). The actual click-to-launch feel and confirming the old
+long-press gesture no longer does anything still need the user's own
+on-host check, per this project's usual GUI-verification limits.
+
 ## 0.15.4
 
 Candidate (unverified) fix for dialogs still not dragging independently

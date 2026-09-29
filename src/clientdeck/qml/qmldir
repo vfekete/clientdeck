@@ -1,6 +1,5 @@
 module ClientDeck
 singleton Theme 1.0 Theme.qml
-singleton DeleteArmState 1.0 DeleteArmState.qml
 ValidatedTextField 1.0 ValidatedTextField.qml
 ThemedSearchField 1.0 ThemedSearchField.qml
 ThemedButton 1.0 ThemedButton.qml
