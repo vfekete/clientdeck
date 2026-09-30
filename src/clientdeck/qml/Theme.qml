@@ -5,6 +5,11 @@ import QtQuick
 QtObject {
     property bool isDark: true
 
+    // High-contrast placeholder when a client has no logo — see [125].
+    readonly property string noLogoSource: isDark ? noLogoLightPath : noLogoDarkPath
+    // Same idea, for an application with no icon set — see [126].
+    readonly property string noAppSource: isDark ? noAppLightPath : noAppDarkPath
+
     readonly property color background: isDark ? "#14161c" : "#f4f5f7"
     // Off-white, not pure white — see [24].
     readonly property color surface: isDark ? "#1c1f28" : "#f2f3f6"
@@ -59,7 +64,8 @@ QtObject {
     readonly property real iconGlyphSize: Math.round(20 * uiScale)
     // Margin SquareIconButton's icon image fills inside of — see [31].
     readonly property real iconMargin: 4 * uiScale
-    readonly property real logoSize: 48 * uiScale
+    // Matches an app button's own outer size — see [127].
+    readonly property real logoSize: iconButtonSize
     readonly property real rowHeight: 72 * uiScale
 
     readonly property int fontSizeSmall: Math.round(11 * uiScale)

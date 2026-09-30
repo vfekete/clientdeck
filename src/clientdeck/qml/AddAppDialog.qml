@@ -119,14 +119,14 @@ Window {
                         contentItem: RowLayout {
                             spacing: Theme.spacing
 
-                            // Missing/unresolvable icon shows nothing — see [51].
+                            // Missing/unresolvable icon falls back to the
+                            // themed no-app placeholder — see [51], [126].
                             Image {
                                 Layout.preferredWidth: Theme.fontSizeLarge
                                 Layout.preferredHeight: Theme.fontSizeLarge
-                                visible: source !== ""
                                 source: modelData.icon
                                     ? (modelData.icon.startsWith("/") ? modelData.icon : "image://theme/" + modelData.icon)
-                                    : ""
+                                    : Theme.noAppSource
                                 fillMode: Image.PreserveAspectFit
                             }
                             Text {

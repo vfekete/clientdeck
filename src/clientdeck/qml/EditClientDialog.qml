@@ -88,7 +88,8 @@ Window {
                 Image {
                     Layout.preferredWidth: Theme.hugeIconButtonSize
                     Layout.preferredHeight: Theme.hugeIconButtonSize
-                    source: root.logoPath
+                    // Themed placeholder when unset — see [125].
+                    source: root.logoPath || Theme.noLogoSource
                     fillMode: Image.PreserveAspectFit
                 }
                 Text {
@@ -115,21 +116,11 @@ Window {
                     font.pixelSize: Theme.fontSizeBody
                     Layout.preferredWidth: root.fieldLabelWidth
                 }
-                // Shown until a logo is picked, so an empty preview
-                // doesn't read as broken/missing.
-                Text {
-                    visible: root.logoPath === ""
-                    text: "No logo selected…"
-                    font.italic: true
-                    color: Theme.textSecondary
-                    font.pixelSize: Theme.fontSizeMedium
-                    verticalAlignment: Text.AlignVCenter
-                    Layout.fillHeight: true
-                }
-                // Fills the row height; width follows the image's own aspect ratio.
+                // Fills the row height; width follows the image's own
+                // aspect ratio. Falls back to the themed no-logo
+                // placeholder when unset — see [125].
                 Image {
-                    visible: root.logoPath !== ""
-                    source: root.logoPath
+                    source: root.logoPath || Theme.noLogoSource
                     fillMode: Image.PreserveAspectFit
                     Layout.preferredHeight: Theme.smallIconButtonSize * 2
                     Layout.preferredWidth: implicitHeight > 0

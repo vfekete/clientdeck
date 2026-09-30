@@ -25,7 +25,8 @@ RowLayout {
         id: logoImage
         Layout.preferredWidth: Theme.logoSize
         Layout.preferredHeight: Theme.logoSize
-        source: root.logoPath
+        // Themed placeholder when unset — see [125].
+        source: root.logoPath || Theme.noLogoSource
         fillMode: Image.PreserveAspectFit
 
         HoverHandler {
@@ -122,11 +123,11 @@ RowLayout {
 
                 Behavior on x { NumberAnimation { duration: Theme.animationDuration } }
 
-                // Icon path/theme-name resolution — see [60].
+                // Icon path/theme-name resolution, falling back to the
+                // themed no-app placeholder — see [60], [126].
                 iconSource: modelData.icon
                     ? (modelData.icon.startsWith("/") ? modelData.icon : "image://theme/" + modelData.icon)
-                    : ""
-                label: modelData.icon ? "" : modelData.name.charAt(0).toUpperCase()
+                    : Theme.noAppSource
                 tooltipText: modelData.name
 
                 onClicked: root.launchApp(appButton.index)

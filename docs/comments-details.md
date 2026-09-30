@@ -237,7 +237,12 @@ Actual bundling (see `build.sh` / `pysidedeploy.spec`):
   next to the compiled binary's extraction root, i.e. `<root>/qml`.
 - `src/scripts/` is *not* auto-detected (it's a sibling of the package,
   not a subdirectory of it), so `build.sh` bundles it explicitly via
-  Nuitka's `--include-data-dir`, landing at `<root>/scripts`.
+  Nuitka's `--include-raw-dir` (not `--include-data-dir` — see [22] for
+  why), landing at `<root>/scripts`.
+- `resources/` (icons, the no-logo placeholders — see [125]) is likewise
+  a sibling of the package, bundled via `--include-data-dir` (fine here:
+  unlike `src/scripts/`, it holds no `.py` files for Nuitka to silently
+  drop), landing at `<root>/resources`.
 - `clientdeck-loader` (the compiled splash binary — see `src/loader/`) is
   a single file, not a directory, so it's bundled via Nuitka's
   `--include-data-files` instead, landing at `<root>/clientdeck-loader`.
@@ -254,6 +259,68 @@ two-process (bootstrap + extracted payload) structure yet.
 Nuitka onefile injects `__nuitka_binary_dir` into `builtins` at runtime
 (see the packaging blueprint) pointing at that directory; falls back to
 the running executable's own directory if that hint isn't present.
+
+### [125] No-logo placeholder: resolving `resources/` at runtime, and the light/dark choice
+
+Until now nothing under `resources/` was ever read by the running app —
+`app_icon.png` only feeds `build.sh`'s packaging metadata and
+`splash_screen.png` is only ever consumed at build time (baked into the
+loader binary as a C header by `gen_splash_header.py`). The two
+`no-logo-*.png` placeholders are the first `resources/` assets the app
+actually loads while running, so `get_resources_dir()` follows the exact
+same source-vs-packaged split as `get_qml_dir()`/`get_scripts_dir()`
+(`<repo root>/resources` from source, `<root>/resources` once packaged —
+see build-side bundling in [16]).
+
+`app.py` resolves both `no-logo-light.png`/`no-logo-dark.png` to absolute
+paths once at startup and feeds them into QML as `noLogoLightPath`/
+`noLogoDarkPath` context properties — the same mechanism already used for
+`initialX`/`initialWidth`/etc., and necessary here because `Theme.qml` (a
+pure QML singleton) has no other way to reach a Python-resolved
+filesystem path. `Theme.noLogoSource` then picks between them: light
+image in dark theme, dark image in light theme — the *opposite* of
+`Theme.isDark`, so the placeholder always reads as a contrasting shape
+against the current theme's background rather than nearly disappearing
+into it.
+
+Every place a client's logo is displayed (`ClientRow.qml`'s row logo,
+`AddClientDialog.qml`/`EditClientDialog.qml`'s logo-picker preview,
+`EditClientDialog.qml`'s header preview) binds `source` as
+`root.logoPath || Theme.noLogoSource` — relying on an empty string being
+falsy in QML/JS, not an explicit `=== ""` check. This also *replaces*
+`AddClientDialog`/`EditClientDialog`'s previous "No logo selected…"
+italic-text placeholder entirely: with a real placeholder graphic
+available, showing plain text instead would just be inconsistent with
+every other empty-logo spot in the app.
+
+### [126] No-app placeholder: same mechanism as [125], applied to app icons
+
+Identical pattern, one step later: `app.py` resolves `no-app-light.png`/
+`no-app-dark.png` the same way and feeds them in as `noAppLightPath`/
+`noAppDarkPath`; `Theme.noAppSource` picks the theme-contrasting one the
+same way `Theme.noLogoSource` does.
+
+Two display sites read an app's icon: `ClientRow.qml`'s per-app
+`SquareIconButton` delegate (`iconSource: modelData.icon ? ... :
+Theme.noAppSource`) and `AddAppDialog.qml`'s discovered-apps list
+delegate. Both previously fell back to something else when `modelData.icon`
+was empty — `ClientRow.qml`'s button showed the app name's first letter as
+a text glyph (`SquareIconButton`'s own built-in fallback, since its
+`iconSource` was `""`), and the discovered-apps list simply rendered
+nothing (`visible: source !== ""`). Since `iconSource` is now *never*
+empty for an app button, `SquareIconButton`'s letter-glyph fallback path
+is simply never reached for these — the `label` assignment that used to
+feed it was removed as dead code rather than left in place unused.
+`ClientRow.qml`'s drag-ghost preview (`dragGhostIcon = appButton.iconSource`)
+inherits the same fallback automatically, since it just copies whatever
+`iconSource` already resolved to.
+
+Only the icon a user can *set* is left as raw, possibly-empty storage
+(`AddAppDialog.qml`'s `addAppToClient(..., modelData.icon || "")` call,
+and the config's own `icon` field) — the fallback is purely a display-time
+concern, exactly like `logoPath` in [125], so switching themes updates an
+already-added app's displayed placeholder live without touching what's
+actually stored for it.
 
 ## src/scripts/create_user.py, delete_user.py, launch_as_user.py
 
@@ -425,6 +492,17 @@ missing one on a future edit).
 SquareIconButton's own icon image now fills the button minus this margin
 on every side (was a small fixed-size icon centered in a much bigger
 button) — scales with zoom like every other size here.
+
+### [127] `logoSize` derived from `iconButtonSize`, not its own literal
+
+Previously a standalone `48 * uiScale`. First changed to
+`iconButtonSize - iconMargin * 2` (matching an app button's *visible
+icon*, per [31], rather than the button's own outer footprint), then to
+plain `iconButtonSize` itself once asked to go further still — a client's
+logo is now exactly as tall as an app button's own outer size. Deriving
+it from that token rather than a matching literal (64) means the
+equivalence holds automatically if `iconButtonSize` is ever retuned
+later, instead of the two quietly drifting apart again.
 
 ## src/clientdeck/qml/ThemedButton.qml
 
