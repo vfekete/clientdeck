@@ -1,5 +1,319 @@
 # Changelog
 
+## 0.3.3+feat.default.logo
+
+Cropped the four `no-logo`/`no-app` placeholder PNGs down to their actual
+drawn content, so they render visibly bigger within their fixed-size
+boxes — no code changes needed.
+
+**User prompt driving this change:** "the 'no-*-light|dark.png' icons,
+change the images (crop to content) to make them look big without custom
+changes in code."
+
+**Why this worked without touching any QML**: every place these
+placeholders are shown already uses `Image.fillMode: Image.PreserveAspectFit`
+against a fixed-size box (see [125]/[126]) — that mode scales the *entire
+source image*, padding included, to fit the box. All four source PNGs
+(originally 1254×1254) had a large transparent margin around the actual
+drawn icon (only 51–75% of each canvas per axis was non-transparent
+content), so the visible icon was rendering noticeably smaller than the
+box it sat in. Cropping the source files to their alpha-channel bounding
+box removes that dead margin entirely — the same `PreserveAspectFit`
+binding now scales the icon itself to fill the box, with zero QML changes.
+
+**How:** scanned each PNG's alpha channel for its content bounding box
+(`QImage.pixelColor(x, y).alpha() > 8`, headlessly via PySide6 — no
+image-editing tool needed) and cropped to it: `no-logo-light.png`
+1254×1254 → 934×896, `no-logo-dark.png` → 836×797, `no-app-light.png` →
+770×708, `no-app-dark.png` → 668×646. Aspect ratios shifted very slightly
+(1254×1254 was a perfect square; the actual drawn icons weren't quite
+centered/square within it, so the crops are ~1.03–1.09:1 rather than
+exactly 1:1) — inconsequential since `PreserveAspectFit` already accounts
+for whatever aspect ratio the source turns out to be, per [125]'s own
+width-follows-height-times-aspect-ratio math.
+
+**Verification:** re-scanned each cropped file's own alpha bounding box
+and confirmed it now spans 100% of the (new, smaller) canvas in both
+axes — no leftover padding, no content cut off. Rendered a headless
+screenshot of the empty-logo/empty-icon state and visually confirmed both
+placeholder graphics display intact and fill their boxes noticeably
+fuller than before. All 147 tests pass (no code changed this round, only
+the four binary assets); `tools/check_versions.py` confirms
+`0.3.3+feat.default.logo`.
+
+## 0.3.2+feat.default.logo
+
+Client logos are bigger again: now exactly as tall as an app button's own
+outer size (64px), up from just its visible icon (56px, 0.3.1).
+
+**User prompt driving this change:** "let's make them even bigger, as
+tall as the button itself"
+
+**Change:** `Theme.logoSize` — `iconButtonSize - iconMargin * 2` since
+0.3.1 — is now plain `iconButtonSize`. Still derived from the token
+rather than a matching literal, so it stays in sync if `iconButtonSize`
+is ever retuned.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** read back a
+client row's logo size against an app button's own outer size — both
+`64×64`, an exact match — and confirmed it still fits comfortably within
+`Theme.rowHeight` (72px). All 147 existing tests pass;
+`tools/check_versions.py` confirms `0.3.2+feat.default.logo`.
+
+## 0.3.1+feat.default.logo
+
+Client logos are now the same height as an app button's actual icon
+(56px), up from a smaller fixed 48px.
+
+**User prompt driving this change:** "the logos of clients, make them
+bigger, they must be as tall as icons in application buttons"
+
+**Change:** `Theme.logoSize` was a standalone `48 * uiScale` literal; it's
+now derived as `iconButtonSize - iconMargin * 2` — the same expression
+`SquareIconButton` itself uses to size its visible icon (not the button's
+64px outer size, its actual icon after the themed margin). Deriving it
+rather than picking a matching literal (56) means the equivalence holds
+automatically if either underlying token is retuned later, instead of the
+two quietly drifting apart again. `Theme.logoSize` is only consumed by
+`ClientRow.qml`'s main row logo, so nothing else (the dialogs' own,
+independently-sized logo previews) is affected.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** read back a
+client row's actual logo `Image` size against an app button's actual
+rendered icon `Image` size side by side — both `56×56`, an exact match.
+All 147 existing tests pass; `tools/check_versions.py` confirms
+`0.3.1+feat.default.logo`.
+
+## 0.3.0+feat.default.logo
+
+Extended the no-logo placeholder mechanism to application icons: a themed
+`no-app-light.png`/`no-app-dark.png` now shows wherever an app has no icon
+set.
+
+**User prompt driving this change:** "similarly to 'no-logo' there are
+icons for no application: `no-app-light.png` and `no-app-dark.png`. Use
+them on places where application has no icon set"
+
+**Same mechanism as the no-logo placeholder (0.2.0)**: `app.py` resolves
+both PNGs via `get_resources_dir()` and feeds them into QML as
+`noAppLightPath`/`noAppDarkPath` context properties; `Theme.noAppSource`
+picks whichever contrasts with the current theme, mirroring
+`Theme.noLogoSource` exactly.
+
+**Two display sites updated**, each *replacing* its previous no-icon
+fallback rather than adding to it:
+- `ClientRow.qml`'s per-app button: `iconSource` now falls back to
+  `Theme.noAppSource` instead of `""`. Since `iconSource` is never empty
+  for an app button anymore, `SquareIconButton`'s letter-glyph fallback
+  (the app name's first letter) is never reached for these — the `label`
+  assignment that used to feed it was removed as dead code. The drag-ghost
+  preview inherits the fix automatically, since it just copies whatever
+  `iconSource` already resolved to.
+- `AddAppDialog.qml`'s discovered-apps list: an icon-less entry previously
+  rendered nothing at all (`visible: source !== ""`); now shows the same
+  placeholder and is unconditionally visible.
+
+The icon a user can actually *set* is left untouched as raw, possibly-
+empty storage — the fallback is purely a display-time concern (same as
+`logoPath`), so it stays reactive to theme changes without touching what's
+actually stored for an app.
+
+Documented in CLAUDE.md's "Adding an app" section; `docs/comments-details.md`
+gained `[126]`, referenced consistently from all 4 source-side call sites.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** confirmed an
+app with no icon shows `no-app-light.png` (default dark theme) both as a
+client-row button (`iconSource`, with an empty `label` — no letter
+fallback) and as a discovered-apps list entry, while an app with a real
+icon (Firefox, via `image://theme/firefox`) is unaffected in both places.
+All 147 tests pass; `tools/check_versions.py` confirms
+`0.3.0+feat.default.logo`.
+
+## 0.2.0+feat.default.logo
+
+Added a themed default-logo placeholder (light-on-dark, dark-on-light) for
+every client that has no logo set.
+
+**User prompt driving this change:** "there are 2 PNG picture files in
+resources: `no-logo-light.png` and `no-logo-dark.png`. Use them as
+substitution for missing logo - when user sets no logo. use light in dark
+theme and dark in light theme so it will be contrast and visible. Use it
+on every place where logo should be shown and either is not or was not
+set already."
+
+**New `get_resources_dir()`** in `paths.py`, mirroring `get_qml_dir()`/
+`get_scripts_dir()`'s source-vs-packaged split — the first time anything
+under `resources/` is read at *runtime* rather than only consumed by
+`build.sh`/the loader at build time (see docs/comments-details.md [125]
+for the full rationale). `app.py` resolves both PNGs to absolute paths
+once at startup and feeds them into QML as `noLogoLightPath`/
+`noLogoDarkPath` context properties, the same mechanism already used for
+`initialX`/`initialWidth`/etc.
+
+**New `Theme.noLogoSource`**: `isDark ? noLogoLightPath : noLogoDarkPath`
+— the *opposite* of the current theme, so the placeholder always reads as
+a contrasting shape rather than nearly disappearing into a same-toned
+background.
+
+**Every logo display site** now binds `source: root.logoPath ||
+Theme.noLogoSource`: `ClientRow.qml`'s row logo, `EditClientDialog.qml`'s
+header preview, and both `AddClientDialog.qml`'s and
+`EditClientDialog.qml`'s logo-picker preview row. That last one also
+*replaces* the "No logo selected…" italic-text placeholder added a few
+versions back — with a real placeholder graphic now available everywhere
+else, leaving plain text in just this one spot would be inconsistent.
+
+**Packaging**: `build.sh` now bundles `resources/` into the packaged
+output via Nuitka's `--include-data-dir` (safe here, unlike
+`src/scripts/`, since it holds no `.py` files for Nuitka to silently drop
+— see docs/comments-details.md [16]/[22]), and checks for the two new
+PNGs in its required-assets preflight. Also fixed a stale bullet in [16]
+that still described `src/scripts/` as bundled via `--include-data-dir`
+when `build.sh`/entry [22] have actually used `--include-raw-dir` for a
+while.
+
+Documented the fallback behavior in CLAUDE.md's "Adding a client" section.
+
+**Verification (headless, `QT_QPA_PLATFORM=offscreen`):** confirmed a
+client with no logo shows `no-logo-light.png` in the (default) dark theme
+and switches to `no-logo-dark.png` after toggling to light theme, while a
+client *with* a real logo path is unaffected by either. Confirmed
+`AddClientDialog`'s and `EditClientDialog`'s logo-picker rows show the
+fallback image (with zero leftover "No logo selected…" text nodes) and
+correctly swap to a real image once one is set. Added
+`test_source_checkout_resources_dir_is_sibling_of_src`/
+`test_packaged_resources_dir_is_sibling_of_root` mirroring the existing
+`get_qml_dir`/`get_scripts_dir` tests. All 147 tests pass;
+`tools/check_versions.py` confirms `0.2.0+feat.default.logo`.
+
+## 0.1.0+feat.default.logo
+
+Reset the branch-local version: the working tree had moved to
+`feat/default-logo` (from `feat/properties`) in between sessions, and
+`tools/check_versions.py` correctly caught the resulting drift
+(`pyproject.toml`/`__version__` still said `0.1.0+feat.properties`)
+the moment it was run.
+
+**User prompt driving this change:** "everytime you're asked to do
+something make sure what branch you are on in that moment (because
+in-between prompts I could change the branch)" — checking the branch at
+the start of this turn surfaced the drift directly; per the per-branch
+versioning rule, a new branch resets to `0.1.0+<branch-slug>`, so this
+branch now starts at `0.1.0+feat.default.logo`. No other code changed
+this round. Verified: `uv sync` installs the new version cleanly,
+`tools/check_versions.py` exits 0, all 145 tests pass.
+
+## 0.1.0+feat.properties
+
+New rule: versioning is now per-branch. `main` keeps plain `X.Y.Z`; every
+other branch versions independently starting at `0.1.0`, with the branch
+name folded into the version as a PEP 440 local-version segment
+(`X.Y.Z+<branch-slug>`). This branch (`feat/properties`) resets to
+`0.1.0+feat.properties` as of this entry — its version no longer
+continues from wherever `main` was (`0.16.0`).
+
+**User prompt driving this change:** "now we are in a different branch
+(not master), so let's add another rule: - separate versioning for every
+branch. - only master version is made out of numbers and dots. - every
+non-master branch starts with branch name followed by version, so in
+case of this branch it is: feat/properties-0.1.0"
+
+The literal requested format (`feat/properties-0.1.0`) isn't usable:
+`pyproject.toml`'s `version` must be PEP 440-valid (enforced by
+`hatchling`/`uv` — confirmed by trying `uv sync` with it, which rejects
+it), and PEP 440 has no `/` and no arbitrary prefix-before-the-number at
+all. Asked the user to pick between the PEP 440-compliant local-version
+form, a non-compliant-but-plainer-looking string (which would've forced
+`pyproject.toml` and the display version to diverge in format), or
+keeping the canonical version field branch-agnostic entirely; they chose
+the PEP 440 local version — confirmed both against PEP 440's own
+canonical regex and by actually running `uv sync` with
+`0.1.0+feat.properties`, which installed cleanly as
+`clientdeck==0.1.0+feat.properties`.
+
+Also: the user said "master," but this repo's actual primary branch is
+named `main` (`origin/HEAD -> origin/main`, confirmed via `git
+symbolic-ref`) — used `main` as `check_versions.py`'s `MAIN_BRANCH`
+rather than the literal word "master," which would never have matched.
+
+`tools/check_versions.py` gained `slugify_branch()` (collapses every run
+of non-alphanumeric characters to a single `.`), `get_current_branch()`
+(best-effort via `git rev-parse --abbrev-ref HEAD`; `None` — not
+raised — on a detached HEAD or missing git, with an injectable `runner`
+for testing), and `check_branch_version()` (the actual rule: plain
+version required on `main`, `+<expected slug>` required everywhere else,
+`SystemExit` with both the expected and actual version on any mismatch —
+same shape as the existing `check_versions_match()`). Wired into
+`main()` right after the existing pyproject/`__version__` check; skipped
+entirely if the branch can't be determined, since an otherwise-valid
+build shouldn't fail just because branch detection isn't possible in
+some context. See docs/comments-details.md [124]. Documented the rule in
+CLAUDE.md's "Versioning & changelog" section.
+
+14 new tests in `tests/tools/test_check_versions.py` (`slugify_branch`
+cases, `check_branch_version` accept/reject on both `main` and other
+branches, `get_current_branch` for a normal branch/detached
+HEAD/missing-git/failing-git via the injectable runner, plus a
+`test_real_repo_branch_version_is_consistent` guard mirroring the
+existing real-repo consistency test). All 145 tests pass. Also ran
+`tools/check_versions.py` directly (build.sh's actual invocation path) —
+prints `0.1.0+feat.properties`, exit 0.
+
+## 0.16.0
+
+Removed the "remove app" (press-and-hold-to-arm, then click, trash-bin)
+behavior from app buttons entirely. A plain left-click, which launches
+the app, is now the button's only interaction.
+
+**User prompt driving this change:** "first I want you to get rid of
+'remove app' behavior. and keep just click (with left mouse button)
+that includes: - remove code for blinking and changin icon and color -
+remove handler for deletion from the list - remove the icon from the
+resources but keep the file itself - only normal click remains which
+launches the app"
+
+`SquareIconButton.qml`: removed `deletable`, `armedForDelete`,
+`cancelsOtherArmedButton`, the hold-timeline `Timer`/blink-state
+properties, the trash-bin glyph `Text`, and the color/icon switching
+that depended on them. `onPressed`/`onReleased`/`onExited` simplified
+back down to just click detection + the (unrelated, kept) drag gesture.
+`ClientRow.qml`: removed `deletable: true` and the `removeAppRequested`
+signal/handler wiring on the per-app delegate. `Main.qml`: removed the
+Escape-disarms-delete `Shortcut`, the background-click-disarms
+`MouseArea`, and `cancelsOtherArmedButton: false` on the theme-toggle
+button — all three existed solely to support the arm/disarm gesture.
+Deleted `DeleteArmState.qml` (the singleton that tracked which button
+was armed app-wide) outright, since removing every caller left it with
+no purpose at all, and removed its `qmldir` registration.
+
+`clientModel.removeAppFromClient()` (`models.py`) and
+`ConfigStore.remove_app()` (`config.py`) were deliberately left in
+place, along with their tests — "remove handler for deletion from the
+list" read as the QML-level event wiring specifically, not the
+underlying (generic, reusable, already-tested) data-layer capability;
+nothing in the QML layer calls either anymore, but they're harmless,
+independently-tested code, not something removing was asked for.
+
+"Remove the icon from the resources but keep the file itself": there
+was never an actual trash-icon *image file* (the trash-bin was always
+just the "🗑" Unicode glyph, confirmed by searching `resources/` and the
+whole repo) — read as docs/comments-details.md [85] ("Why the trash-bin
+glyph is 2x size") and its neighboring delete-specific entries ([32],
+[67], [77], [79]-[81], [85]-[86], [88]-[92]): removed now that the code
+they explained is gone, per the established convention, while obviously
+keeping `comments-details.md` itself (it documents plenty else). Updated
+CLAUDE.md's "Main window" spec bullet to match (plain click only, no
+press-and-hold).
+
+Verified headlessly: brace-balance checks on every edited QML file, a
+full `QT_QPA_PLATFORM=offscreen` smoke run of `app.run()` with a seeded
+config containing a real client + app (exercising `ClientRow`'s
+`SquareIconButton` delegate directly, not just the empty state) — no QML
+binding/parse errors either way. All 131 tests pass (no Python-side
+logic changed). The actual click-to-launch feel and confirming the old
+long-press gesture no longer does anything still need the user's own
+on-host check, per this project's usual GUI-verification limits.
+
 ## 0.15.4
 
 Candidate (unverified) fix for dialogs still not dragging independently

@@ -42,29 +42,11 @@ Window {
         context: Qt.ApplicationShortcut
         onActivated: Theme.zoomOut()
     }
-    // Cancels whichever app button is currently armed for delete (showing
-    // its trash-bin icon), per "user presses ESC (and application has
-    // focus)".
-    Shortcut {
-        sequence: "Escape"
-        context: Qt.ApplicationShortcut
-        onActivated: DeleteArmState.disarmAny()
-    }
-
     Rectangle {
         id: glassPanel
         anchors.fill: parent
         radius: Theme.cornerRadius * 1.5
         border.width: 0
-
-        // Catches clicks on empty background — see [67].
-        MouseArea {
-            anchors.fill: parent
-            onPressed: (mouse) => {
-                DeleteArmState.disarmAny()
-                mouse.accepted = false
-            }
-        }
 
         // Fades toward opaque on hover, never fully opaque — see [68].
         property real topAlpha: panelHoverHandler.hovered ? Theme.glassPanelHoverAlpha : Theme.glassPanelAlpha
@@ -135,7 +117,6 @@ Window {
                             apps: model.apps
 
                             onLaunchApp: (appIndex) => appLauncher.launchApp(username, appIndex)
-                            onRemoveAppRequested: (appIndex) => clientModel.removeAppFromClient(username, appIndex)
                             onMoveAppRequested: (fromIndex, toIndex) => clientModel.moveApp(username, fromIndex, toIndex)
                             onAddAppRequested: {
                                 addAppDialog.targetUsername = username
@@ -171,8 +152,6 @@ Window {
                     label: Theme.isDark ? "☀" : "☾"
                     tooltipText: Theme.isDark ? "Switch to light theme" : "Switch to dark theme"
                     tooltipAbove: true
-                    // Theme switch is incidental, shouldn't cancel a pending delete.
-                    cancelsOtherArmedButton: false
                     onClicked: Theme.isDark = !Theme.isDark
                 }
                 SquareIconButton {

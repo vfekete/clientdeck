@@ -16,7 +16,7 @@ VERSION="$(uv run python tools/check_versions.py)"
 echo "    version: $VERSION"
 
 echo "==> Checking required assets"
-for asset in resources/app_icon.png resources/splash_screen.png src/clientdeck/qml/Main.qml src/scripts/launch_as_user.py src/scripts/create_user.py; do
+for asset in resources/app_icon.png resources/splash_screen.png resources/no-logo-light.png resources/no-logo-dark.png resources/no-app-light.png resources/no-app-dark.png src/clientdeck/qml/Main.qml src/scripts/launch_as_user.py src/scripts/create_user.py; do
   if [[ ! -f "$asset" ]]; then
     echo "error: required asset missing: $asset" >&2
     exit 1
@@ -47,14 +47,18 @@ OUTPUT_NAME="${APP_NAME}-${VERSION}"
 echo "==> Generating pysidedeploy.spec (auto-detects QML files/Qt modules)"
 uv run pyside6-deploy "$ENTRY_POINT" --init -f
 
-echo "==> Patching spec: title, icon, output dir, and bundling src/scripts/ + clientdeck-loader"
+echo "==> Patching spec: title, icon, output dir, and bundling src/scripts/ + resources/ + clientdeck-loader"
 # --include-raw-dir for src/scripts/ — see docs/comments-details.md [22].
 # --include-data-files for clientdeck-loader: a single file, not a
 # directory, so --include-data-dir/--include-raw-dir don't apply — see [16].
+# --include-data-dir for resources/ (not --include-raw-dir): it holds no
+# .py files, so [22]'s reason for avoiding --include-data-dir doesn't
+# apply here, and get_resources_dir() (see [125]) expects a plain sibling
+# directory of the binary either way.
 sed -i "s|^title = .*|title = ${OUTPUT_NAME}|" "$SPEC_FILE"
 sed -i "s|^exec_directory = .*|exec_directory = ${DIST_DIR}|" "$SPEC_FILE"
 sed -i "s|^icon = .*|icon = ${REPO_ROOT}/resources/app_icon.png|" "$SPEC_FILE"
-sed -i "s|^extra_args = .*|extra_args = --quiet --noinclude-qt-translations --include-raw-dir=${REPO_ROOT}/src/scripts=./scripts --include-data-files=${LOADER_BIN}=./clientdeck-loader|" "$SPEC_FILE"
+sed -i "s|^extra_args = .*|extra_args = --quiet --noinclude-qt-translations --include-raw-dir=${REPO_ROOT}/src/scripts=./scripts --include-data-dir=${REPO_ROOT}/resources=./resources --include-data-files=${LOADER_BIN}=./clientdeck-loader|" "$SPEC_FILE"
 
 echo "==> Running pyside6-deploy (Nuitka onefile build — this takes a while)"
 uv run pyside6-deploy "$ENTRY_POINT" -c "$SPEC_FILE" -f

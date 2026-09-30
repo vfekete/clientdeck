@@ -43,6 +43,14 @@ def get_scripts_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "scripts"
 
 
+def get_resources_dir() -> Path:
+    """Static assets (icons, the no-logo placeholders) — see [125]."""
+    root = get_packaged_root_dir()
+    if root is not None:
+        return root / "resources"
+    return Path(__file__).resolve().parent.parent.parent / "resources"
+
+
 def get_loader_path() -> Path:
     """Path to the compiled clientdeck-loader splash binary — see [16].
     Caller checks `.is_file()`; the dev-mode path only exists once

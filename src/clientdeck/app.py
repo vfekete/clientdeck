@@ -22,7 +22,7 @@ from .desktop_apps import discover_desktop_apps
 from .icon_provider import ThemeIconProvider, ensure_icon_theme_configured
 from .loader_ipc import maybe_launch_loader
 from .models import ClientListModel
-from .paths import get_qml_dir, get_scripts_dir, is_packaged_build
+from .paths import get_qml_dir, get_resources_dir, get_scripts_dir, is_packaged_build
 from .username import username_or_group_exists
 from .window_placement import MonitorInfo, resolve_startup_geometry
 
@@ -156,6 +156,12 @@ def run(argv: list[str] | None = None) -> int:
     context.setContextProperty("initialY", geometry.y)
     context.setContextProperty("initialWidth", geometry.width)
     context.setContextProperty("initialHeight", geometry.height)
+    # Fed to Theme.qml's noLogoSource — see docs/comments-details.md [125].
+    context.setContextProperty("noLogoLightPath", str(get_resources_dir() / "no-logo-light.png"))
+    context.setContextProperty("noLogoDarkPath", str(get_resources_dir() / "no-logo-dark.png"))
+    # Fed to Theme.qml's noAppSource — see docs/comments-details.md [126].
+    context.setContextProperty("noAppLightPath", str(get_resources_dir() / "no-app-light.png"))
+    context.setContextProperty("noAppDarkPath", str(get_resources_dir() / "no-app-dark.png"))
 
     # No addImportPath() needed — see [9].
     qml_dir = get_qml_dir()

@@ -237,7 +237,12 @@ Actual bundling (see `build.sh` / `pysidedeploy.spec`):
   next to the compiled binary's extraction root, i.e. `<root>/qml`.
 - `src/scripts/` is *not* auto-detected (it's a sibling of the package,
   not a subdirectory of it), so `build.sh` bundles it explicitly via
-  Nuitka's `--include-data-dir`, landing at `<root>/scripts`.
+  Nuitka's `--include-raw-dir` (not `--include-data-dir` — see [22] for
+  why), landing at `<root>/scripts`.
+- `resources/` (icons, the no-logo placeholders — see [125]) is likewise
+  a sibling of the package, bundled via `--include-data-dir` (fine here:
+  unlike `src/scripts/`, it holds no `.py` files for Nuitka to silently
+  drop), landing at `<root>/resources`.
 - `clientdeck-loader` (the compiled splash binary — see `src/loader/`) is
   a single file, not a directory, so it's bundled via Nuitka's
   `--include-data-files` instead, landing at `<root>/clientdeck-loader`.
@@ -254,6 +259,68 @@ two-process (bootstrap + extracted payload) structure yet.
 Nuitka onefile injects `__nuitka_binary_dir` into `builtins` at runtime
 (see the packaging blueprint) pointing at that directory; falls back to
 the running executable's own directory if that hint isn't present.
+
+### [125] No-logo placeholder: resolving `resources/` at runtime, and the light/dark choice
+
+Until now nothing under `resources/` was ever read by the running app —
+`app_icon.png` only feeds `build.sh`'s packaging metadata and
+`splash_screen.png` is only ever consumed at build time (baked into the
+loader binary as a C header by `gen_splash_header.py`). The two
+`no-logo-*.png` placeholders are the first `resources/` assets the app
+actually loads while running, so `get_resources_dir()` follows the exact
+same source-vs-packaged split as `get_qml_dir()`/`get_scripts_dir()`
+(`<repo root>/resources` from source, `<root>/resources` once packaged —
+see build-side bundling in [16]).
+
+`app.py` resolves both `no-logo-light.png`/`no-logo-dark.png` to absolute
+paths once at startup and feeds them into QML as `noLogoLightPath`/
+`noLogoDarkPath` context properties — the same mechanism already used for
+`initialX`/`initialWidth`/etc., and necessary here because `Theme.qml` (a
+pure QML singleton) has no other way to reach a Python-resolved
+filesystem path. `Theme.noLogoSource` then picks between them: light
+image in dark theme, dark image in light theme — the *opposite* of
+`Theme.isDark`, so the placeholder always reads as a contrasting shape
+against the current theme's background rather than nearly disappearing
+into it.
+
+Every place a client's logo is displayed (`ClientRow.qml`'s row logo,
+`AddClientDialog.qml`/`EditClientDialog.qml`'s logo-picker preview,
+`EditClientDialog.qml`'s header preview) binds `source` as
+`root.logoPath || Theme.noLogoSource` — relying on an empty string being
+falsy in QML/JS, not an explicit `=== ""` check. This also *replaces*
+`AddClientDialog`/`EditClientDialog`'s previous "No logo selected…"
+italic-text placeholder entirely: with a real placeholder graphic
+available, showing plain text instead would just be inconsistent with
+every other empty-logo spot in the app.
+
+### [126] No-app placeholder: same mechanism as [125], applied to app icons
+
+Identical pattern, one step later: `app.py` resolves `no-app-light.png`/
+`no-app-dark.png` the same way and feeds them in as `noAppLightPath`/
+`noAppDarkPath`; `Theme.noAppSource` picks the theme-contrasting one the
+same way `Theme.noLogoSource` does.
+
+Two display sites read an app's icon: `ClientRow.qml`'s per-app
+`SquareIconButton` delegate (`iconSource: modelData.icon ? ... :
+Theme.noAppSource`) and `AddAppDialog.qml`'s discovered-apps list
+delegate. Both previously fell back to something else when `modelData.icon`
+was empty — `ClientRow.qml`'s button showed the app name's first letter as
+a text glyph (`SquareIconButton`'s own built-in fallback, since its
+`iconSource` was `""`), and the discovered-apps list simply rendered
+nothing (`visible: source !== ""`). Since `iconSource` is now *never*
+empty for an app button, `SquareIconButton`'s letter-glyph fallback path
+is simply never reached for these — the `label` assignment that used to
+feed it was removed as dead code rather than left in place unused.
+`ClientRow.qml`'s drag-ghost preview (`dragGhostIcon = appButton.iconSource`)
+inherits the same fallback automatically, since it just copies whatever
+`iconSource` already resolved to.
+
+Only the icon a user can *set* is left as raw, possibly-empty storage
+(`AddAppDialog.qml`'s `addAppToClient(..., modelData.icon || "")` call,
+and the config's own `icon` field) — the fallback is purely a display-time
+concern, exactly like `logoPath` in [125], so switching themes updates an
+already-added app's displayed placeholder live without touching what's
+actually stored for it.
 
 ## src/scripts/create_user.py, delete_user.py, launch_as_user.py
 
@@ -281,6 +348,46 @@ Not part of the `clientdeck` package itself (it's a build-time-only
 concern, kept out of what actually gets shipped) — invoked directly by
 `build.sh`. On success, prints the version to stdout so the caller can
 capture it for naming the output binary.
+
+### [124] Per-branch versioning: why a PEP 440 local version, and how it's enforced
+
+Per explicit user request: every non-`main` branch versions independently
+of `main`, starting fresh at `0.1.0`, with the branch name folded into
+the version string so it's unambiguous which branch a given build came
+from. The obvious literal format ("`feat/properties-0.1.0`") isn't
+actually usable: `pyproject.toml`'s `version` field must be a valid [PEP
+440](https://peps.python.org/pep-0440/) version (enforced by
+`hatchling`/`uv`, confirmed by trying to `uv sync` with it — it's
+rejected), and PEP 440 has no concept of arbitrary text before the
+numeric release, nor does it allow `/` anywhere. PEP 440's actual escape
+hatch for exactly this ("attach non-numeric build/branch metadata to a
+version") is the *local version* segment, introduced with `+`:
+`0.1.0+feat.properties` — confirmed valid both against PEP 440's own
+canonical regex and by actually running `uv sync` with it. Local
+segments only allow `[A-Za-z0-9]` runs joined by `.`, hence
+`slugify_branch()` collapsing every run of non-alphanumeric characters
+(not just `/`) to a single `.`.
+
+`MAIN_BRANCH = "main"` — not the word "master" the user used
+colloquially — matches this repo's *actual* primary branch
+(`origin/HEAD -> origin/main`, confirmed via `git symbolic-ref`), which
+is what the rule needs to key off, regardless of what generic term
+people use for "the main branch."
+
+`check_branch_version()` enforces the rule (called from `main()` right
+after the existing `check_versions_match()`, so both checks run every
+build): plain `X.Y.Z` (no `+`) required on `MAIN_BRANCH`, `X.Y.Z+<expected
+slug>` required everywhere else, `SystemExit` on any mismatch — same
+"fail loudly, name both what's expected and what's there" shape as
+`check_versions_match()`. `get_current_branch()` is best-effort: returns
+`None` (not raised) on a detached HEAD, missing git, or any subprocess
+failure, and `main()` simply skips the branch check in that case — unlike
+version drift itself (always checkable, always enforced), *which* branch
+you're on genuinely can be undeterminable in some contexts (e.g. no
+`.git` directory at all), and that shouldn't block an otherwise-valid
+build. `runner` is injectable (same shape as `compositor.py`'s
+`display_factory`) so tests can exercise every path without a real `git`
+subprocess or depending on which branch the test suite happens to run on.
 
 ## build.sh
 
@@ -386,17 +493,16 @@ SquareIconButton's own icon image now fills the button minus this margin
 on every side (was a small fixed-size icon centered in a much bigger
 button) — scales with zoom like every other size here.
 
-## src/clientdeck/qml/DeleteArmState.qml
+### [127] `logoSize` derived from `iconButtonSize`, not its own literal
 
-### [32] Why a global singleton tracks the armed button
-
-Tracks which single app button (if any) is currently showing its
-delete/trash-bin affordance, app-wide. Only one button may be "armed" for
-delete at a time; individual SquareIconButton instances don't otherwise
-know about each other, so this is the shared place that lets arming one
-implicitly disarm a previously-armed different one, and lets a global
-cancel (clicking empty background, pressing Escape) reach whichever
-button is currently armed without the caller needing a reference to it.
+Previously a standalone `48 * uiScale`. First changed to
+`iconButtonSize - iconMargin * 2` (matching an app button's *visible
+icon*, per [31], rather than the button's own outer footprint), then to
+plain `iconButtonSize` itself once asked to go further still — a client's
+logo is now exactly as tall as an app button's own outer size. Deriving
+it from that token rather than a matching literal (64) means the
+equivalence holds automatically if `iconButtonSize` is ever retuned
+later, instead of the two quietly drifting apart again.
 
 ## src/clientdeck/qml/ThemedButton.qml
 
@@ -845,15 +951,6 @@ while a dialog was open — the default window-scoped context apparently
 doesn't count a focused Popup's content as "the window" for
 shortcut-matching purposes.
 
-### [67] What the background `MouseArea` is for
-
-Catches clicks that land on empty background (not on any button) — the
-other half of "user clicks elsewhere" alongside SquareIconButton's own
-`onPressed`, which handles a click landing on a *different* button.
-Declared first/beneath the real content below, so any actual button's
-own MouseArea still gets first claim at its own coordinates; this only
-ever sees clicks at points nothing else claimed.
-
 ### [68] How the hover-driven glass opacity works
 
 Idle: the normal resting glass translucency. Hovered (mouse anywhere
@@ -916,11 +1013,11 @@ toolbar (theme/zoom/reset) sits at the very bottom edge of the
 borderless window, so a tooltip below it would render past the window's
 own edge and never be visible — those callers set this true.
 
-### [75] `deletable`/`draggable` default off
+### [75] `draggable` default off
 
-Opt-in behaviors — off by default, so the many non-app uses of this
-component (theme toggle, zoom +/-, "+" buttons, dialog buttons) are
-unaffected. ClientRow.qml turns both on for actual app buttons.
+Opt-in — off by default, so the many non-app uses of this component
+(theme toggle, zoom +/-, "+" buttons, dialog buttons) are unaffected.
+ClientRow.qml turns it on for actual app buttons.
 
 ### [76] `bigLabel`
 
@@ -933,53 +1030,10 @@ fill the 75%-of-button box exactly, however big/small the button ends up
 (window resize, `Theme.uiScale` zoom, …) — a fixed `pixelSize` couldn't
 guarantee "always 75%" across those.
 
-### [77] `cancelsOtherArmedButton`
-
-Whether pressing *this* button counts as "clicking elsewhere" for any
-other button currently armed for delete — on by default, since that's
-the whole point of the click-elsewhere-cancels rule. The theme toggle is
-the one exception (set false at its call site in Main.qml): switching
-dark/light is an incidental display preference, not an action on any
-particular app, so it shouldn't silently cancel an in-progress delete
-confirmation on some other button.
-
 ### [78] `clicked` signal semantics
 
-Fires only for a plain press+release that never armed delete and never
-turned into a drag — i.e. exactly the old single-signal behavior,
-unchanged for every caller that doesn't opt into the deletable/draggable
-behaviors.
-
-### [79] `armedForDelete`
-
-True once a `deletable` button has been held (pressed, not moved away)
-through the full hold schedule (see [81]). Persists after the mouse is
-released (showing the trash-bin icon indefinitely); a separate, later
-click is what actually deletes — see [91].
-
-### [80] `onArmedForDeleteChanged`
-
-Keeps `DeleteArmState.armedButton` in sync so the rest of the app can
-find (and cancel) whichever button is currently armed without a direct
-reference to it. Also the mechanism behind "arming a second button
-disarms the first": setting a different button's `armedForDelete` to
-false here re-enters this same handler on *that* button, which is
-harmless since it only clears the registry when it still points at
-itself.
-
-### [81] The hold timeline (`holdSchedule`)
-
-As a list of phase durations (ms): wait 150ms (still could just be a
-click — no visual change yet), then alternate between the current
-appearance and the target (opposite) one every 500ms, landing on — and
-staying on — the target the 4th time it comes around. For arming, that
-reads as I 150ms, D 500ms, I 500ms, D 500ms, I 500ms, D 500ms, I 500ms, D
-(permanent) — three temporary blinks of the trash bin, then it commits.
-Disarming an already-armed button mirrors this exactly (same schedule,
-same code) since `visualArmed` just alternates between whatever
-`armedForDelete` currently is and its opposite — it always ends on
-"original icon" instead just because `armedForDelete` started `true`
-this time.
+Fires on a plain left-click press+release that never turned into a drag
+— every caller that doesn't opt into `draggable` just gets this.
 
 ### [82] `ghosted`
 
@@ -1006,24 +1060,7 @@ circular after zooming, confirmed by inspecting live property values.
 
 Unlike the main window's glass panel behind it, a button's own fill
 never fades with hover-driven background opacity; only the background is
-meant to do that. Armed-for-delete still gets its own hover feedback (a
-lighter/more saturated red), same as every other state — it shouldn't be
-the one state that looks static under the cursor.
-
-### [85] Why the trash-bin glyph is 2x size
-
-100% bigger than the normal icon/letter glyph size — a plain letter or
-app icon reads fine at the normal size, but the trash bin is the one
-state meant to read as an unambiguous warning at a glance.
-
-### [86] `holdTimer`
-
-Walks through `holdSchedule` one phase at a time (variable interval per
-phase, hence manual `restart()` rather than `repeat: true`). Reaching
-the end of the schedule is the actual arm/disarm moment; every phase
-before that is purely visual (see `blinking`). A released-before-the-end
-press is a *click* instead, handled entirely in `onReleased` via
-`holdTimer.running` (see [90]).
+meant to do that.
 
 ### [87] Why `preventStealing: true`
 
@@ -1038,57 +1075,16 @@ moves, which is exactly what a real mouse produces and what real users
 were hitting). This is the standard, documented fix for a draggable
 MouseArea nested inside a Flickable/ScrollView.
 
-### [88] `armedAtPressStart`
-
-Snapshot of `armedForDelete` at the start of *this* press — decides what
-a short click (release before the hold timer fires) means: delete-confirm
-if the button was already armed, or the normal click/launch action
-otherwise. Needed because `onTriggered` may flip `armedForDelete`
-mid-press, and by release time the live value no longer reflects what it
-was when this press began.
-
-### [89] Why `onPressed` disarms other buttons
-
-Pressing anywhere else — including on another armed-for-delete button —
-is a "click elsewhere", which cancels that other button's armed state
-(does not affect this button) — unless this button opted out (see [77]).
-
-### [90] `wasClick` in `onReleased`
-
-A non-deletable button has no hold concept at all, so every release is a
-click. A deletable button's `holdTimer` still *running* at release means
-this press ended before the hold schedule finished — i.e. it was a plain
-click too. If the schedule had already completed, `armedForDelete` was
-already toggled and this release is just the end of that hold; nothing
-further happens.
-
-### [91] Why the armed-click branch resets `armedForDelete` before emitting
-
-A click while already armed is the explicit delete confirmation — reset
-first (see [80]'s ordering) since `deleteRequested()` can destroy this
-delegate synchronously.
-
-### [92] Why `onExited` only cancels an in-progress hold
-
-Leaving the button area while a hold is in progress cancels just that
-hold (per "do not move the cursor outside button area") —
-`armedForDelete` itself is untouched, since a hold that never completed
-never changed it. Not applied to hover-only exits (mouse not pressed) or
-to an already-started drag, which is expected to roam outside this
-button's own bounds.
-
 ### [93] Why there's both a `MouseArea` and a `HoverHandler`
 
 MouseArea above already grabs press/drag; a HoverHandler is passive
 (hover-only, never grabs), so the two coexist without interfering — same
 pattern already used for the client logo's tooltip in ClientRow.qml.
 
-### [94] Why the tooltip is hidden during drag/delete-arm
+### [94] Why the tooltip is hidden during drag
 
-Never during an active drag/delete-arm sequence (including a mid-hold
-blink frame that's currently *showing* the armed look) — a tooltip
-fighting for attention with the ghost or the trash-bin icon would just
-be noise.
+Never during an active drag — a tooltip fighting for attention with the
+drag ghost would just be noise.
 
 ### [121] Why the hover-grow effect sizes the icon in pixels, not via `scale`
 
