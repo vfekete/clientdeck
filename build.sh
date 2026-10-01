@@ -16,7 +16,7 @@ VERSION="$(uv run python tools/check_versions.py)"
 echo "    version: $VERSION"
 
 echo "==> Checking required assets"
-for asset in resources/app_icon.png resources/splash_screen.png resources/no-logo-light.png resources/no-logo-dark.png resources/no-app-light.png resources/no-app-dark.png src/clientdeck/qml/Main.qml src/scripts/launch_as_user.py src/scripts/create_user.py; do
+for asset in resources/app_icon.png resources/splash_screen.png resources/no-item-dark.png resources/no-item-light.png src/clientdeck/qml/Main.qml src/scripts/launch_as_user.py src/scripts/create_user.py; do
   if [[ ! -f "$asset" ]]; then
     echo "error: required asset missing: $asset" >&2
     exit 1

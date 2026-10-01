@@ -239,7 +239,7 @@ Actual bundling (see `build.sh` / `pysidedeploy.spec`):
   not a subdirectory of it), so `build.sh` bundles it explicitly via
   Nuitka's `--include-raw-dir` (not `--include-data-dir` — see [22] for
   why), landing at `<root>/scripts`.
-- `resources/` (icons, the no-logo placeholders — see [125]) is likewise
+- `resources/` (icons, the no-item placeholders — see [125]) is likewise
   a sibling of the package, bundled via `--include-data-dir` (fine here:
   unlike `src/scripts/`, it holds no `.py` files for Nuitka to silently
   drop), landing at `<root>/resources`.
@@ -260,49 +260,51 @@ Nuitka onefile injects `__nuitka_binary_dir` into `builtins` at runtime
 (see the packaging blueprint) pointing at that directory; falls back to
 the running executable's own directory if that hint isn't present.
 
-### [125] No-logo placeholder: resolving `resources/` at runtime, and the light/dark choice
+### [125] No-item placeholder: resolving `resources/` at runtime, and the light/dark choice
 
 Until now nothing under `resources/` was ever read by the running app —
 `app_icon.png` only feeds `build.sh`'s packaging metadata and
 `splash_screen.png` is only ever consumed at build time (baked into the
 loader binary as a C header by `gen_splash_header.py`). The two
-`no-logo-*.png` placeholders are the first `resources/` assets the app
+no-item placeholders (originally `no-logo-*.png`) are the first `resources/` assets the app
 actually loads while running, so `get_resources_dir()` follows the exact
 same source-vs-packaged split as `get_qml_dir()`/`get_scripts_dir()`
 (`<repo root>/resources` from source, `<root>/resources` once packaged —
 see build-side bundling in [16]).
 
-`app.py` resolves both `no-logo-light.png`/`no-logo-dark.png` to absolute
-paths once at startup and feeds them into QML as `noLogoLightPath`/
-`noLogoDarkPath` context properties — the same mechanism already used for
+`app.py` resolves both `no-item-dark.png`/`no-item-light.png` to
+absolute paths once at startup and feeds them into QML as
+`noItemDarkThemePath`/`noItemLightThemePath` context properties — the same mechanism already used for
 `initialX`/`initialWidth`/etc., and necessary here because `Theme.qml` (a
 pure QML singleton) has no other way to reach a Python-resolved
-filesystem path. `Theme.noLogoSource` then picks between them: light
-image in dark theme, dark image in light theme — the *opposite* of
-`Theme.isDark`, so the placeholder always reads as a contrasting shape
-against the current theme's background rather than nearly disappearing
-into it.
+filesystem path. `Theme.noItemSource` then picks between them by
+theme. The files are named for the theme they're shown *in*, not for
+their own colors: `no-item-dark.png` (shown in the dark theme) is drawn
+in a lighter tone and `no-item-light.png` in a darker one, so each still
+contrasts — faintly, by design — with its theme's background.
 
 Every place a client's logo is displayed (`ClientRow.qml`'s row logo,
 `AddClientDialog.qml`/`EditClientDialog.qml`'s logo-picker preview,
 `EditClientDialog.qml`'s header preview) binds `source` as
-`root.logoPath || Theme.noLogoSource` — relying on an empty string being
+`root.logoPath || Theme.noItemSource` — relying on an empty string being
 falsy in QML/JS, not an explicit `=== ""` check. This also *replaces*
 `AddClientDialog`/`EditClientDialog`'s previous "No logo selected…"
 italic-text placeholder entirely: with a real placeholder graphic
 available, showing plain text instead would just be inconsistent with
 every other empty-logo spot in the app.
 
-### [126] No-app placeholder: same mechanism as [125], applied to app icons
+### [126] No-item placeholder applied to app icons too
 
-Identical pattern, one step later: `app.py` resolves `no-app-light.png`/
-`no-app-dark.png` the same way and feeds them in as `noAppLightPath`/
-`noAppDarkPath`; `Theme.noAppSource` picks the theme-contrasting one the
-same way `Theme.noLogoSource` does.
+App icons use the very same `Theme.noItemSource` as client logos in [125]
+— one shared placeholder pair, not a separate per-kind one. (Until
+0.1.0+feat.properties there were two pairs, `no-logo-*.png` and
+`no-app-*.png`, each with its own `Theme` property; they were merged at
+the user's request so every "nothing set" spot in the app shows the same
+graphic.)
 
 Two display sites read an app's icon: `ClientRow.qml`'s per-app
 `SquareIconButton` delegate (`iconSource: modelData.icon ? ... :
-Theme.noAppSource`) and `AddAppDialog.qml`'s discovered-apps list
+Theme.noItemSource`) and `AddAppDialog.qml`'s discovered-apps list
 delegate. Both previously fell back to something else when `modelData.icon`
 was empty — `ClientRow.qml`'s button showed the app name's first letter as
 a text glyph (`SquareIconButton`'s own built-in fallback, since its

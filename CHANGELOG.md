@@ -1,5 +1,127 @@
 # Changelog
 
+## 0.1.6+feat.properties
+
+Placeholder files renamed by the user to be named for the theme they're
+shown in, and unused PNGs removed; code updated to match.
+
+**User prompt driving this change:** "I renamed the file
+`no-item-dark-1.png` -> `no-item-light.png` and `no-item-light-1.png` ->
+`no-item-dark.png`, also I removed any other PNG file not used"
+
+`no-item-dark.png` (light-toned, shown in the dark theme) and
+`no-item-light.png` (dark-toned, shown in the light theme). `app.py`'s
+context properties were renamed `noItemDarkThemePath`/
+`noItemLightThemePath` so `Theme.noItemSource` reads directly as
+`isDark ? noItemDarkThemePath : noItemLightThemePath` instead of the old
+inverted light/dark mapping. Also updated `build.sh`'s required-asset
+check, CLAUDE.md and docs/comments-details.md [125]. The removed files
+(the old `no-logo-*`/`no-app-*` pairs and the unused `no-item-*` trial
+variants) are no longer referenced anywhere.
+
+## 0.1.5+feat.properties
+
+Removed the tile background from the no-item placeholder: only the
+dashed border and the figure remain, on a fully transparent background.
+
+**User prompt driving this change:** "hmm ok and lets try to remove
+background from the pictures and make it transparent"
+
+For `no-item-light-1.png`/`no-item-dark-1.png`, each pixel was treated
+as a single foreground color composited over the image's uniform tile
+fill (`#262c35` / `#f3f7fc`), and its alpha recovered from how far it
+sits from that fill toward the foreground (`#505866` / `#d9e0ea`, the
+image's strongest-contrast color); alphas under 6% were zeroed to drop
+fill noise. Result: every visible pixel is that one foreground color at
+varying opacity, so anti-aliased edges stay smooth with no fill-colored
+fringe. Image-only change; no code touched.
+
+## 0.1.4+feat.properties
+
+Toned down the no-item placeholder's dashed border and inner figure so
+they sit much closer to the tile/theme color — the placeholder is meant
+to be barely visible, not draw attention.
+
+**User prompt driving this change:** "ok now change the dash border and
+logo inside colors to be more closer to theme color (so on black
+background in dark theme this 'missing' placeholder will be barely
+visible)"
+
+Every opaque pixel of `no-item-light-1.png`/`no-item-dark-1.png` was
+blended toward that image's own tile fill color (`#262c35` dark-theme
+variant, `#f3f7fc` light-theme variant), keeping 35% of its original
+contrast against it — a linear contrast reduction, so anti-aliased edges
+and the alpha mask from 0.1.3 stay intact. Image-only change; no code
+touched.
+
+## 0.1.3+feat.properties
+
+`no-item-light-1.png`/`no-item-dark-1.png` no longer have a square
+opaque background: the fill now stops at the dashed border's outer edge
+(a rounded rectangle) and everything outside it is transparent.
+
+**User prompt driving this change:** "ok and right now they have
+rectangular background. make the background and on the level of dashed
+border and make the rest transparent"
+
+Applied as an anti-aliased rounded-rect alpha mask (rect
+`x=11.5, y=13.5, 457×454`, corner radius 52px, both measured from the
+dashes' outer edge) to both 480×480 images; size unchanged, so ~12px of
+fully transparent margin remains around the frame. Image-only change; no
+code touched.
+
+## 0.1.2+feat.properties
+
+Cropped `no-item-light-1.png`/`no-item-dark-1.png` so the dashed frame
+sits near the image border, making the placeholder's actual content fill
+its slot instead of being a small tile inside a large background.
+
+**User prompt driving this change:** "hmm ok crop those picture so the
+dashed line will be near the border"
+
+Both images cropped from 1254×1254 to the same 480×480 square
+(`x=387, y=380`), leaving a ~12px margin outside the dashed frame
+(measured at roughly x 399–854, y 394–846 in both originals). This drops
+the outer rounded tile and the background around it; what remains is
+the tile's own fill, the dashed frame and the figure. Image-only change;
+no code touched.
+
+## 0.1.1+feat.properties
+
+Swapped the shared no-item placeholder pair from 0.1.0+feat.properties to
+`no-item-light-1.png` (dark theme) / `no-item-dark-1.png` (light theme),
+as a trial so the two variants can be compared visually.
+
+**User prompt driving this change:** "ok, try to use
+`no-item-light-1.png` for dark and `no-item-dark-1.png` for light instead
+of ones you set just now (I want to visually decide which looks better."
+
+Only the file names changed (`app.py`'s context properties, `build.sh`'s
+required-asset check, CLAUDE.md, docs/comments-details.md [125]); the
+`Theme.noItemSource` mechanism is untouched. Reverting to the glass
+variants is the same two-name swap.
+
+## 0.1.0+feat.properties
+
+Client logos and app icons now share a single "nothing set" placeholder
+instead of two separate pairs (`no-logo-*` / `no-app-*`). Also the first
+change on `feat/properties`, so the version resets to this branch's own
+series per the per-branch versioning rule.
+
+**User prompt driving this change:** "replace 'no icon' for logo and
+application with single one: for dark theme `no-item-glass-light-2.png`
+and for light theme `no-item-glass-2-dark.png`."
+
+`app.py` now feeds QML one pair of context properties
+(`noItemLightPath`/`noItemDarkPath`), and `Theme.qml` exposes one
+`noItemSource` (light image on dark theme, dark image on light theme),
+used in every place that previously used `noLogoSource` or
+`noAppSource`: the client row, the add/edit client dialogs, the app
+buttons, and the discovered-apps list. `build.sh`'s required-asset check,
+CLAUDE.md's spec and docs/comments-details.md [125]/[126] were updated to
+match. The old `no-logo-*.png`/`no-app-*.png` files are no longer
+referenced but are left in `resources/` (not deleted).
+
 ## 0.16.0
 
 - Removed "remove app" hold-to-delete gesture; app buttons are now

@@ -89,7 +89,7 @@ Window {
                     Layout.preferredWidth: Theme.hugeIconButtonSize
                     Layout.preferredHeight: Theme.hugeIconButtonSize
                     // Themed placeholder when unset — see [125].
-                    source: root.logoPath || Theme.noLogoSource
+                    source: root.logoPath || Theme.noItemSource
                     fillMode: Image.PreserveAspectFit
                 }
                 Text {
@@ -117,10 +117,10 @@ Window {
                     Layout.preferredWidth: root.fieldLabelWidth
                 }
                 // Fills the row height; width follows the image's own
-                // aspect ratio. Falls back to the themed no-logo
+                // aspect ratio. Falls back to the themed no-item
                 // placeholder when unset — see [125].
                 Image {
-                    source: root.logoPath || Theme.noLogoSource
+                    source: root.logoPath || Theme.noItemSource
                     fillMode: Image.PreserveAspectFit
                     Layout.preferredHeight: Theme.smallIconButtonSize * 2
                     Layout.preferredWidth: implicitHeight > 0

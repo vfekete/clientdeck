@@ -114,10 +114,10 @@ Window {
                 spacing: Theme.spacing
 
                 // Fills the row height; width follows the image's own
-                // aspect ratio. Falls back to the themed no-logo
+                // aspect ratio. Falls back to the themed no-item
                 // placeholder when unset — see [125].
                 Image {
-                    source: root.logoPath || Theme.noLogoSource
+                    source: root.logoPath || Theme.noItemSource
                     fillMode: Image.PreserveAspectFit
                     Layout.preferredHeight: Theme.smallIconButtonSize * 2
                     Layout.preferredWidth: implicitHeight > 0

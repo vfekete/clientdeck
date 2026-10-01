@@ -44,7 +44,7 @@ def get_scripts_dir() -> Path:
 
 
 def get_resources_dir() -> Path:
-    """Static assets (icons, the no-logo placeholders) — see [125]."""
+    """Static assets (icons, the no-item placeholders) — see [125]."""
     root = get_packaged_root_dir()
     if root is not None:
         return root / "resources"

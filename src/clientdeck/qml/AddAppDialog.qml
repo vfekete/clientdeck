@@ -120,13 +120,13 @@ Window {
                             spacing: Theme.spacing
 
                             // Missing/unresolvable icon falls back to the
-                            // themed no-app placeholder — see [51], [126].
+                            // themed no-item placeholder — see [51], [126].
                             Image {
                                 Layout.preferredWidth: Theme.fontSizeLarge
                                 Layout.preferredHeight: Theme.fontSizeLarge
                                 source: modelData.icon
                                     ? (modelData.icon.startsWith("/") ? modelData.icon : "image://theme/" + modelData.icon)
-                                    : Theme.noAppSource
+                                    : Theme.noItemSource
                                 fillMode: Image.PreserveAspectFit
                             }
                             Text {

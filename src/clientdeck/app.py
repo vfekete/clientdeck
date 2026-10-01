@@ -156,12 +156,9 @@ def run(argv: list[str] | None = None) -> int:
     context.setContextProperty("initialY", geometry.y)
     context.setContextProperty("initialWidth", geometry.width)
     context.setContextProperty("initialHeight", geometry.height)
-    # Fed to Theme.qml's noLogoSource — see docs/comments-details.md [125].
-    context.setContextProperty("noLogoLightPath", str(get_resources_dir() / "no-logo-light.png"))
-    context.setContextProperty("noLogoDarkPath", str(get_resources_dir() / "no-logo-dark.png"))
-    # Fed to Theme.qml's noAppSource — see docs/comments-details.md [126].
-    context.setContextProperty("noAppLightPath", str(get_resources_dir() / "no-app-light.png"))
-    context.setContextProperty("noAppDarkPath", str(get_resources_dir() / "no-app-dark.png"))
+    # Fed to Theme.qml's noItemSource — see docs/comments-details.md [125].
+    context.setContextProperty("noItemDarkThemePath", str(get_resources_dir() / "no-item-dark.png"))
+    context.setContextProperty("noItemLightThemePath", str(get_resources_dir() / "no-item-light.png"))
 
     # No addImportPath() needed — see [9].
     qml_dir = get_qml_dir()
