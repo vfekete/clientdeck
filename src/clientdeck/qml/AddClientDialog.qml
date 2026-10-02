@@ -48,6 +48,10 @@ Window {
         usernameField.text = ""
         usernameField.touched = false
         root.logoPath = ""
+        advancedSection.expanded = false
+        supportDbusCheck.checked = true
+        supportDisplayCheck.checked = true
+        singleSshAgentCheck.checked = true
         creationFailed = false
     }
 
@@ -155,6 +159,29 @@ Window {
                 // invalid — see [119]: confirmed with the user at submit
                 // time instead, via useExistingUserConfirm below.
                 validator: (t) => t.trim().length > 0
+            }
+
+            // Advanced account-creation options — not yet acted on, see [129].
+            ThemedExpander {
+                id: advancedSection
+                Layout.fillWidth: true
+                title: "Advanced"
+
+                ThemedCheckBox {
+                    id: supportDbusCheck
+                    checked: true
+                    text: "Support DBus"
+                }
+                ThemedCheckBox {
+                    id: supportDisplayCheck
+                    checked: true
+                    text: "Support Wayland/X"
+                }
+                ThemedCheckBox {
+                    id: singleSshAgentCheck
+                    checked: true
+                    text: "Single SSH Agent"
+                }
             }
 
             Text {

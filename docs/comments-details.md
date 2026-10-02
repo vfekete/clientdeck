@@ -573,7 +573,42 @@ Reserve room for the icon+hint at the left, in every state, so typed
 text lines up in the same place whether the hint is showing or not
 (rather than text jumping left the instant it disappears).
 
+## src/clientdeck/qml/ThemedExpander.qml
+
+### [128] Expander design: instant toggle, indented body, dialog grows
+
+A plain `ColumnLayout` (header row + body), not a Controls component:
+there's no themed collapsible in Controls Basic, and the header is just
+two `Text`s plus a hairline divider, matching the dialogs' existing
+flat/glass look (`Theme.textSecondary` at rest, `Theme.textPrimary` on
+hover, `Theme.surfaceGlass` for the line — the same color as the dialog
+border). The body is indented by the chevron's width + gap, so its
+contents line up with the title text rather than the chevron;
+`contentIndent` overrides that, e.g. `EditClientDialog.qml` sets it to
+its label-column width + spacing so the checkboxes line up with its
+field column instead.
+
+Expand/collapse is an instant `visible` toggle, not an animated height —
+consistent with this project's preference for instant snaps over
+animated micro-interactions. Every dialog using it sizes its `Window`
+from `contentColumn.implicitHeight`, so the dialog simply grows/shrinks
+with the section; no extra wiring needed.
+
 ## src/clientdeck/qml/AddClientDialog.qml
+
+### [129] "Advanced" options are UI-only for now
+
+The "Advanced" section (in both `AddClientDialog.qml` and, since
+0.3.2+feat.properties, `EditClientDialog.qml`) (Support DBus, Support Wayland/X, Single SSH
+Agent) was added in 0.3.0+feat.properties as layout first; the user
+said the details of what each option does at account-creation time will
+come later. So the three checkboxes are reset (to checked) on every `open()` but
+their values aren't yet passed to `createLinuxUser()`/`create_user.py`
+or stored in the client's config. Wire them in once that behavior is
+specified. Because nothing is stored yet, the edit dialog can't show a
+client's actual settings — it resets them to the same all-checked
+defaults on every `openFor()`; once they're persisted, pre-fill them
+from the client's config there instead, like the other fields.
 
 ### [40] Why this is a real top-level `Window`, with `flags` matching Main.qml exactly
 
@@ -802,7 +837,9 @@ background/icon/text colors, which don't adapt to `Theme.isDark` at all
 light theme" (the default text color read fine in dark mode but was
 effectively invisible against a light `Theme.surface` background). Same
 "fully own the rendering" approach as SquareIconButton/ValidatedTextField.
-The manual-entry `CheckBox` below has the same problem and fix.
+Checkboxes have the same problem and fix; that styling now lives in the
+shared `ThemedCheckBox.qml` (extracted in 0.3.0+feat.properties from this
+dialog's manual-entry checkbox), used everywhere a checkbox appears.
 
 ### [51] Why a missing/unresolvable app icon just shows nothing
 
@@ -826,13 +863,17 @@ an absolute image path or an icon-theme name, same as a discovered app's
 
 ## src/clientdeck/qml/ClientRow.qml
 
-### [54] Why double-click uses `TapHandler`, not `MouseArea`
+### [54] Why the logo's right-click uses `TapHandler`, not `MouseArea`
 
-Double-clicking the logo opens the "modify client" dialog — see
+Right-clicking the logo opens the "modify client" dialog — see
 CLAUDE.md's "Modifying a client" section. `TapHandler` (not a
 `MouseArea`) since the logo needs no other pointer behavior and a
 passive handler coexists cleanly with the `HoverHandler` above, same
 reasoning as SquareIconButton's own tooltip HoverHandler.
+`acceptedButtons: Qt.RightButton` + `onTapped` (a single right-click),
+replacing the original left-button `onDoubleTapped` in
+0.2.0+feat.properties so that "edit this thing" is the same gesture
+everywhere — right-click — for client logos and, next, app buttons.
 
 ### [55] Why `appsContainer` is a plain `Item` + `Repeater`, not a `Row`
 

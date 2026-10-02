@@ -191,38 +191,10 @@ Window {
                     // Only way to set an icon for a manual app — see [53].
                     placeholderText: "Icon name or path (optional)"
                 }
-                CheckBox {
+                ThemedCheckBox {
                     id: manualUseSu
                     text: "Run as su - <username> -c '...'"
                     checked: true
-
-                    // Same theming issue/fix as the ItemDelegate above — see [50].
-                    contentItem: Text {
-                        text: manualUseSu.text
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontSizeMedium
-                        verticalAlignment: Text.AlignVCenter
-                        leftPadding: manualUseSu.indicator.width + manualUseSu.spacing
-                    }
-
-                    indicator: Rectangle {
-                        implicitWidth: Theme.fontSizeLarge
-                        implicitHeight: Theme.fontSizeLarge
-                        x: manualUseSu.leftPadding
-                        y: parent.height / 2 - height / 2
-                        radius: Theme.cornerRadius / 4
-                        color: manualUseSu.checked ? Theme.accent : Theme.surfaceGlass
-                        border.width: 1
-                        border.color: Theme.accent
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "✓"
-                            color: Theme.textPrimary
-                            visible: manualUseSu.checked
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
-                    }
                 }
                 Item { Layout.fillHeight: true }
                 RowLayout {

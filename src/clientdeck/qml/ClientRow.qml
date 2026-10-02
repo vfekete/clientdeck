@@ -33,9 +33,10 @@ RowLayout {
             id: logoHoverHandler
         }
 
-        // Opens the "modify client" dialog. TapHandler, not MouseArea — see [54].
+        // Right-click opens the "modify client" dialog. TapHandler, not MouseArea — see [54].
         TapHandler {
-            onDoubleTapped: root.editRequested()
+            acceptedButtons: Qt.RightButton
+            onTapped: root.editRequested()
         }
 
         ThemedTooltip {

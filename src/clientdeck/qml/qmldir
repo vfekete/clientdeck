@@ -3,6 +3,8 @@ singleton Theme 1.0 Theme.qml
 ValidatedTextField 1.0 ValidatedTextField.qml
 ThemedSearchField 1.0 ThemedSearchField.qml
 ThemedButton 1.0 ThemedButton.qml
+ThemedCheckBox 1.0 ThemedCheckBox.qml
+ThemedExpander 1.0 ThemedExpander.qml
 SquareIconButton 1.0 SquareIconButton.qml
 ThemedTooltip 1.0 ThemedTooltip.qml
 ClientRow 1.0 ClientRow.qml

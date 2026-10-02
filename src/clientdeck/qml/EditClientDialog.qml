@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtQuick.Window
 
-// Themed "modify client" dialog, opened by double-clicking a client's logo
+// Themed "modify client" dialog, opened by right-clicking a client's logo
 // (see ClientRow.qml). Same fields as AddClientDialog, pre-filled with the
 // client's current values, plus the rename-aware flow described in
 // CLAUDE.md's "Modifying a client" section: changing the username creates
@@ -53,6 +53,10 @@ Window {
         usernameField.text = username
         usernameField.touched = false
         root.logoPath = logoPath || ""
+        advancedSection.expanded = false
+        supportDbusCheck.checked = true
+        supportDisplayCheck.checked = true
+        singleSshAgentCheck.checked = true
         root.modificationFailed = false
         root.open()
     }
@@ -186,6 +190,31 @@ Window {
                     // The client's own current username must not self-flag as taken.
                     validator: (t) => t.trim().length > 0
                         && (t === root.originalUsername || !usernameChecker.isTaken(t))
+                }
+            }
+
+            // Same options as AddClientDialog's, body aligned with the
+            // field column — not yet acted on or stored, see [129].
+            ThemedExpander {
+                id: advancedSection
+                Layout.fillWidth: true
+                title: "Advanced"
+                contentIndent: root.fieldLabelWidth + Theme.spacing
+
+                ThemedCheckBox {
+                    id: supportDbusCheck
+                    text: "Support DBus"
+                    checked: true
+                }
+                ThemedCheckBox {
+                    id: supportDisplayCheck
+                    text: "Support Wayland/X"
+                    checked: true
+                }
+                ThemedCheckBox {
+                    id: singleSshAgentCheck
+                    text: "Single SSH Agent"
+                    checked: true
                 }
             }
 

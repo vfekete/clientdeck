@@ -1,5 +1,88 @@
 # Changelog
 
+## 0.3.2+feat.properties
+
+"Edit client" dialog gained the same collapsible "Advanced" section as
+"Add client" (Support DBus, Support Wayland/X, Single SSH Agent — all
+checked by default).
+
+**User prompt driving this change:** "add same thing to 'Edit client'
+dialog window"
+
+Placed after the Username row, above the error text and Cancel/Apply.
+This dialog uses a label column + field column layout, so the "Advanced"
+header starts at the label column's left edge and the checkboxes are
+indented to line up with the field column — via a new optional
+`contentIndent` property on `ThemedExpander` (default unchanged, so "Add
+client" looks the same as before). Collapsed and reset to all-checked on
+every open. Still UI-only: nothing is stored per client yet, so the
+dialog can't show a client's real settings — see
+docs/comments-details.md [128]/[129] (both updated). CLAUDE.md's
+"Modifying a client" spec now mentions the section.
+
+## 0.3.1+feat.properties
+
+"Add client"'s three Advanced checkboxes (Support DBus, Support
+Wayland/X, Single SSH Agent) now default to checked.
+
+**User prompt driving this change:** "by default those checkboxes are
+set to true"
+
+Set `checked: true` on each and changed `reset()` to restore them to
+checked (not unchecked) every time the dialog opens. CLAUDE.md spec and
+docs/comments-details.md [129] updated. Still UI-only (see [129]).
+
+## 0.3.0+feat.properties
+
+"Add client" dialog gained a collapsible "Advanced" section with three
+account-creation checkboxes.
+
+**User prompt driving this change:** "First let's change 'Add client'
+dialog window beneath 'username to create' add bottom buttons add
+expander 'Advanced' where more advanced settings for user account
+creation will be stored, namely: 'Support DBus' checkbox 'Support
+Wayland/X' checkbox 'Single SSH Agent' checkbox in every case make sure
+that layout is visually consistent with the rest of the dialog window
+(or application window, depending where the change is made)"
+
+Read as: between the "Username to create" field and the Cancel/Add
+buttons. New reusable components, so the look stays consistent:
+- `ThemedExpander.qml` — "▸ Advanced ────" header (secondary text color,
+  primary on hover, hairline divider in the dialog-border color), body
+  indented to line up with the title; collapsed by default, toggles
+  instantly and the dialog resizes to fit (see docs/comments-details.md
+  [128]).
+- `ThemedCheckBox.qml` — the existing themed checkbox from
+  `AddAppDialog.qml`'s "Run as su" option, extracted unchanged and now
+  used there and for the three new options (updated [50]). Only change
+  on extraction: `leftPadding: 0`, so the box sits flush with the left
+  edge of the fields/labels around it instead of 6px inset (Controls
+  Basic's default padding) — this also nudges the existing "Run as su"
+  checkbox 6px left, into line with the text fields above it.
+
+All three start unchecked and the section starts collapsed every time
+the dialog opens. **Not yet functional**: their values aren't passed to
+user creation or saved with the client — behavior to be specified (see
+[129]). CLAUDE.md's "Adding a client" spec lists the new section.
+
+## 0.2.0+feat.properties
+
+The "modify client" dialog now opens on right-click of the client's
+logo, instead of double-click.
+
+**User prompt driving this change:** "ok first of all let's unite the
+behavior. Now when I double click on client logo, 'edit client' dialog
+window appears. Change it to right click."
+
+First step toward one consistent "edit" gesture (right-click) across the
+app — app buttons are planned to get the same for modifying an app.
+`ClientRow.qml`'s logo `TapHandler` now takes `acceptedButtons:
+Qt.RightButton` and fires on `onTapped` (single right-click); left
+clicks/double-clicks on the logo no longer do anything. Updated
+CLAUDE.md's "Modifying a client" spec, `EditClientDialog.qml`'s header
+comment and docs/comments-details.md [54]. Minor bump: user-visible
+interaction change.
+
 ## 0.1.6+feat.properties
 
 Placeholder files renamed by the user to be named for the theme they're
