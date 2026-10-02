@@ -71,6 +71,9 @@ QtObject {
     readonly property int fontSizeMedium: Math.round(15 * uiScale)
     readonly property int fontSizeLarge: Math.round(18 * uiScale)
 
+    // Fontconfig's generic monospace alias (PS1 input/preview).
+    readonly property string monoFontFamily: "monospace"
+
     readonly property real fieldPadding: 10 * uiScale
     readonly property real fieldRightPadding: 30 * uiScale
 }

@@ -28,7 +28,7 @@ Window {
     modality: Qt.WindowModal
     color: "transparent"
     visible: false
-    width: 420 * Theme.uiScale
+    width: 480 * Theme.uiScale
     height: contentColumn.implicitHeight + dialogPadding * 2
 
     // x/y set once, imperatively, not as a live binding — see [41].
@@ -57,6 +57,7 @@ Window {
         supportDbusCheck.checked = true
         supportDisplayCheck.checked = true
         singleSshAgentCheck.checked = true
+        promptSetting.reset()
         root.modificationFailed = false
         root.open()
     }
@@ -66,8 +67,11 @@ Window {
         root.close()
     }
 
+    // Only while this window is focused — nested dialogs' Escape shortcuts
+    // would otherwise all match at once and cancel out; see [137].
     Shortcut {
         sequence: "Escape"
+        enabled: focusTracker.focusWindow === root
         onActivated: root.close()
     }
 
@@ -215,6 +219,12 @@ Window {
                     id: singleSshAgentCheck
                     text: "Single SSH Agent"
                     checked: true
+                }
+                PromptSetting {
+                    id: promptSetting
+                    Layout.fillWidth: true
+                    username: usernameField.text
+                    anchorWindow: root
                 }
             }
 

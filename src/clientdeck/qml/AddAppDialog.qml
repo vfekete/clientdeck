@@ -56,8 +56,11 @@ Window {
         root.visible = false
     }
 
+    // Only while this window is focused — nested dialogs' Escape shortcuts
+    // would otherwise all match at once and cancel out; see [137].
     Shortcut {
         sequence: "Escape"
+        enabled: focusTracker.focusWindow === root
         onActivated: root.close()
     }
 

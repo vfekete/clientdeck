@@ -1,5 +1,153 @@
 # Changelog
 
+## 0.6.0+feat.properties
+
+PS1 dialog: the "Insert" combo box is replaced by colon hints typed
+straight into the PS1 field. Also fixes Escape doing nothing in any
+dialog opened on top of another dialog.
+
+**User prompt driving this change:** "remove the 'insert' combo box, for
+special character use 'colon hints'. Eg, all special characters will
+have hints such as :user, or :hostname. the moment he writes ':' small
+list of these hints together with real value (for example \u) is shown
+and he can select the one he wants. As he types the "list-menu" will
+shrink show only special chars that starts with the same string
+(something like context search). If user presses in any tim escape,
+small window is closed and it is  treated as he actually wanted to write
+down what he wrote instead of colon-hint."
+
+- New reusable `ColonHintTextField.qml` (a `ValidatedTextField` +
+  `hints`): typing ":" opens a list of `:keyword  code  description`
+  rows under the colon, narrowed by prefix as you type (e.g. `:h` →
+  hostname, hhmm, history); click or Enter/Tab picks (Up/Down to move)
+  and replaces `:query` with the code; Escape closes the list and keeps
+  the text literally. The list also closes on no match, a non-word
+  character, or moving the cursor back past the ":". See
+  docs/comments-details.md [136].
+- `ps1.ELEMENTS` → `ps1.HINTS` (keyword, code, description) — same codes
+  plus keywords: user, hostname, fullhostname, cwd, basename, prompt,
+  time, time12, ampm, hhmm, date, shell, version, jobs, history, command,
+  newline, title, green, blue, red, yellow, cyan, magenta, color256,
+  reset. `ps1Renderer.elements()` → `hints()`. Tests updated (+1:
+  keywords unique and lowercase alphanumeric).
+- **Bug fix (pre-existing)**: Escape never closed a dialog stacked on
+  another dialog (confirm dialogs over Add/Edit client, the PS1 dialog):
+  all their Escape shortcuts matched at once and Qt fired none
+  (ambiguous shortcut). Each dialog's Escape shortcut is now enabled only
+  when it is the focused window (new `focusTracker` exposed from
+  `app.py`), and stacked dialogs hand focus back to the dialog
+  underneath on close. See [137].
+
+Verified headlessly with real key events: hints open on ":", narrow on
+typing, Enter/Tab/Up/Down/click pick, Escape keeps literal text without
+closing the dialog, a second Escape closes only the PS1 dialog (the
+client dialog stays), and Escape over a confirm dialog closes just the
+confirm, then the client dialog. CLAUDE.md spec updated.
+
+## 0.5.0+feat.properties
+
+Client dialogs' Advanced section: the bash prompt preview + "Configure"
+button replaced by a "Set bash prompt (PS1)" checkbox with "Configure"
+beside it and the selected prompt's name underneath.
+
+**User prompt driving this change:** "the confugration / advanced part,
+instead of button 'configure' and preview add:
+[  ] Set bash prompt (PS1) checkbox     [ Configure ]
+     selected: prompt name (either custom or Neon)"
+
+`PromptSetting.qml` rewritten: `ThemedCheckBox` "Set bash prompt (PS1)"
+(unchecked by default, as drawn), "Configure" right-aligned on the same
+row and enabled only while checked, and a "Selected: <name>" caption
+aligned under the checkbox label — the matching preset's name ("Default",
+"Neon") or "Custom" — dimmed while unchecked. New `reset()` (unchecked +
+default PS1) called by both dialogs on open. The terminal preview now
+only appears inside the "Configure" dialog, so `Ps1Preview`'s compact
+mode and `render_session_html`'s `history` flag (added in 0.4.1 just for
+the inline preview) were removed. The client dialogs stay at 480px: at
+420 the edit dialog's field column can't fit checkbox + "Configure" on
+one row. Also dropped the extra top margin above this row so it's spaced
+like the other checkboxes. See docs/comments-details.md [135] (new),
+[129]/[134] updated; CLAUDE.md spec updated. Still UI-only.
+
+## 0.4.1+feat.properties
+
+PS1 preview now looks like two small terminal windows instead of two
+plain colored rows.
+
+**User prompt driving this change:** "make the preview look like part of
+terminal not just simple row, now it looks like glued together"
+
+Each preview (dark and light, still theme-independent) is now a
+miniature terminal window: title bar with a centered title and three
+decorative GNOME-style window buttons, rounded corners, terminal-chrome
+border, and clear spacing between the two. The title is the window title
+the PS1 actually sets (`acme@host: ~/work` for both presets), or
+"Terminal" if it sets none. In "Configure", each window shows a short
+session — prompt + `ls`, its output, then the live prompt with cursor;
+in the client dialogs' narrower Advanced section a compact variant shows
+only the live prompt line (the full session wrapped there and made the
+edit dialog ~870px tall). `ps1.py` gained `TerminalColors`,
+`window_title()`, `render_title()` and `render_session_html()`
+(+4 tests); `ps1Renderer.render()` replaced by `renderSession()` and
+`title()`. See docs/comments-details.md [134].
+
+## 0.4.0+feat.properties
+
+Bash prompt (PS1) configurator in the "Add client" and "Edit client"
+dialogs' Advanced section.
+
+**User prompt driving this change:** "add into advanced also bash prompt
+configurator, eg; 2 lines with dark background and light background (no
+matter the theme) simulating background of the shell with PS1 and all
+ANSI colors that are written there). and on the right side there will be
+button 'Configure'. When pressed, new dialog window opens allowing to set
+the bash PS1 (combo box with possible elements such as username (\u) or
+hostname (\h)), input element to write the PS1 and preview beneath which
+will change in realtime based on the change of the PS in input element.
+Also button 'reset' wich sets default PS1. Default PS1 is
+"\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$"
+at the bottom there will be (as usuall) buttons 'Cancel' and "Apply'.
+Also somewhere on top there will be combo box with predefined PS1ones
+with names. For now only 'default' (PS1 already provided) and 'Neon'
+(\[\e]0;\u@\h: \w\a\]\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[38;5;051m\]\u@\h\[\033[00m\]:\[\033[38;5;207m\]\w\[\033[00m\]\$)
+if user selects predefined PS1 while having changes in edited PS1 show
+warning dialog box that there are changes and whether he wants to
+continue with buttons 'Yes' and 'No'."
+
+New:
+- `src/clientdeck/ps1.py` (+ `tests/test_ps1.py`, 18 tests): expands PS1
+  escapes with sample values (real hostname, the dialog's username,
+  `~/work`), handles `${var:+…}`-style expansion, and interprets the
+  resulting ANSI stream (16/256/truecolor, bold/italic/underline/reverse;
+  window-title OSC hidden) into rich-text HTML — no real shell is run.
+  Also holds the presets ("Default", "Neon", both verbatim as given) and
+  the insertable-elements list. Exposed to QML as `ps1Renderer`
+  (`app.py`'s `_Ps1Renderer`). See docs/comments-details.md [130]-[132].
+- `Ps1Preview.qml`: the two simulated terminal lines (dark `#1e1e1e` /
+  light `#ffffff`, GNOME Terminal palette) with a block cursor after the
+  prompt; wraps rather than clips a too-long prompt.
+- `PromptSetting.qml`: "Bash prompt (PS1)" caption, preview, and
+  "Configure" button on the right; used in both client dialogs' Advanced
+  section, below the checkboxes.
+- `Ps1ConfigDialog.qml`: Preset combo, Insert combo (inserts at the PS1
+  field's cursor), monospace PS1 input, live preview, Reset / Cancel /
+  Apply, and the Yes/No "replace your changes?" confirm when picking a
+  preset over edited text ([133]). The preset combo shows
+  "Default (modified)" once edited, or "Custom" for a PS1 matching no
+  preset.
+- `ThemedComboBox.qml` (the app had no themed combo box yet) and
+  `Theme.monoFontFamily`.
+
+Both client dialogs widened from 420 to 480px so the default prompt
+preview fits on one line next to "Configure" in the edit dialog's
+indented field column (it wrapped mid-word at 420).
+
+Like the checkboxes, the PS1 is **UI-only for now**: applied to the
+dialog, reset to the default on every open, but not yet stored per
+client or applied to the Linux account ([129] rewritten). CLAUDE.md spec
+updated. Note the two given PS1s end in `\$` with no trailing space
+(Debian's stock prompt has `\$ `); kept exactly as given.
+
 ## 0.3.2+feat.properties
 
 "Edit client" dialog gained the same collapsible "Advanced" section as

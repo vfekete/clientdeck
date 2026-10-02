@@ -594,21 +594,186 @@ animated micro-interactions. Every dialog using it sizes its `Window`
 from `contentColumn.implicitHeight`, so the dialog simply grows/shrinks
 with the section; no extra wiring needed.
 
+## src/clientdeck/ps1.py
+
+### [130] PS1 preview: rendered in Python, not by running bash
+
+The preview never invokes a real shell: running `bash -i` (let alone as
+the client's user) just to draw a prompt would be slow, environment-
+dependent and, for another user, need privilege. Instead `ps1.py`
+reproduces the two stages a real terminal session goes through:
+
+1. `expand_prompt()` — bash's own prompt decoding: backslash escapes
+   (`\u`, `\h`, `\w`, `\$`, `\t`, octal `\033`, `\e`, …) with sample
+   values from `PromptContext`, `\[`/`\]` dropped (they only tell
+   readline which bytes are zero-width), then parameter expansion ([131]).
+2. `terminal_runs()` — what the terminal does with that byte stream:
+   SGR (`ESC[…m`) colors/attributes — 16-color, 256-color and truecolor,
+   bold/italic/underline/reverse — while other control sequences are
+   consumed invisibly ([132]).
+
+The runs become Qt rich-text HTML (`render_ps1_html`), with spaces as
+`&nbsp;` since Qt's rich text collapses whitespace. Colors use GNOME
+Terminal's default palette, and the two simulated terminals have fixed
+dark/light backgrounds independent of the app theme, so the user sees how
+the prompt looks in either kind of terminal. `Ps1Preview.qml` gets these
+colors from `ps1Renderer.terminalColors()` rather than duplicating them.
+Bold is rendered as bold weight in the same color (modern GNOME Terminal
+default), not as the "bright" variant. Sample values: the real machine
+hostname, the dialog's current username, `~/work` as working directory.
+
+### [131] Parameter expansion is a small, deliberate subset
+
+Bash expands `$var`/`${…}` in PS1 after decoding escapes (with
+`promptvars` on, the default). Only the forms that appear in real-world
+prompts are handled — `$name`, `${name}`, `${name:+word}`,
+`${name:-word}` and their non-colon variants — with every variable
+treated as unset unless `PromptContext.variables` provides it; this is
+what makes Debian's `${debian_chroot:+($debian_chroot)}` correctly
+disappear. Command substitution (`$(…)`, backticks) is not executed and
+shows up literally in the preview. `\$` is protected with a placeholder
+during expansion so it stays a literal `$`.
+
+### [132] Non-SGR escape sequences are invisible in the preview
+
+OSC sequences (`ESC ] … BEL`) — like the `\e]0;\u@\h: \w\a` window-title
+setter in both presets — change terminal state, not the visible line, so
+they are consumed and produce no text. Other CSI sequences (cursor
+movement etc.) and stray BEL/CR are dropped the same way; the preview
+only models what ends up drawn on a single prompt line (plus `\n`
+line breaks). The preview text also wraps (`WrapAnywhere`) when wider
+than its box, as a real terminal would, rather than clipping.
+
+### [134] Preview drawn as miniature terminal windows
+
+A bare colored strip read as "two rows glued together", not as a
+terminal, so each preview is a small window: a title bar (GNOME-style:
+centered bold title, three dimmed decorative buttons on the right),
+rounded corners and a border in the terminal's own chrome colors
+(`TerminalColors`, approximating GNOME Terminal's dark/light Adwaita
+look), and the two windows clearly spaced apart.
+
+The title is the one the PS1 itself sets via OSC 0/2 (`\e]0;…\a` in both
+presets → `user@host: ~/work`), falling back to "Terminal" when the
+prompt sets none — so the title-setter part of a PS1 is visible in the
+preview instead of silently disappearing ([132]).
+
+`Ps1ConfigDialog` shows a short session — the prompt with a sample `ls`
+command, its output (directories in `ls`'s default bold blue), then the
+live prompt with a block cursor — so the prompt is seen in context,
+including how it butts up against typed text (e.g. a PS1 without a
+trailing space). The preview only appears in `Ps1ConfigDialog`; the
+client dialogs just name the selected prompt ([135]).
+
+## src/clientdeck/qml/ColonHintTextField.qml
+
+### [136] Colon hints: how the completion list opens, narrows and closes
+
+Replaced the PS1 dialog's "Insert" combo box (user request): special
+codes are typed as `:keyword` instead, so they're discoverable without
+leaving the keyboard. Generic component — a `ValidatedTextField` with a
+`hints` list of `{keyword, value, description}`; the PS1 hints live in
+`ps1.HINTS` (keywords unique, lowercase alphanumeric — tested).
+
+- **Opening**: only a ":" the user actually *types* opens it — detected
+  in `Keys.onPressed` (`event.text === ":"`) and consumed by the
+  `textEdited` it produces. Comparing text lengths in `onTextEdited`
+  doesn't work reliably, since `textChanged` (also fired by programmatic
+  changes like applying a preset) can run first. Deleting text back to
+  an existing ":" therefore doesn't reopen the list, and neither does
+  setting the text programmatically.
+- **Narrowing**: the query is the text between the ":" (`hintAnchor`)
+  and the cursor, matched as a keyword prefix (case-insensitive). The
+  list closes — and completion stops — when nothing matches, when the
+  query stops being alphanumeric (a space, `\`, `[`, …), when the cursor
+  moves to or before the ":", or when the ":" itself is deleted. This is
+  what makes a literal ":" (like the one between `\h` and `\w` in the
+  default PS1) cost nothing: the list just closes as you keep typing.
+- **Choosing**: click a row, or Enter/Tab on the highlighted one (Up/Down
+  wrap around); `:query` is replaced by the hint's value and the cursor
+  goes after it.
+- **Escape**: closes the list and leaves the typed text exactly as is.
+  The field claims Escape in `Keys.onShortcutOverride` while the list is
+  open, otherwise the key event never reaches it — the dialog's own
+  Escape `Shortcut` would take it first.
+- The `Popup` never takes focus (`focus: false`, `NoAutoClose`), so the
+  field keeps receiving keystrokes; it's positioned under the ":" and
+  clamped to the field width, showing at most 6 rows.
+
+## Dialog Escape shortcuts (all dialogs) / app.py `_FocusTracker`
+
+### [137] Escape must only close the focused dialog
+
+Every dialog closes on Escape via a window-level `Shortcut`. With a
+dialog open on top of another dialog (`ConfirmDialog` over Add/Edit
+client, `Ps1ConfigDialog` over a client dialog), Qt considers *all* their
+Escape shortcuts in context — `Qt.WindowShortcut` matches the focus
+window's transient-parent chain too — so the key is reported as an
+ambiguous shortcut (`activatedAmbiguously`) and **none** fires: Escape
+did nothing at all in any nested dialog. This predates the PS1 work; it
+surfaced when testing the colon hints (confirmed headlessly via
+`activatedAmbiguously`). `Window.active` doesn't help either, as it is
+also true for the focus window's transient parents.
+
+Fix: app.py's `_FocusTracker` exposes `QGuiApplication.focusWindow()` as
+`focusTracker.focusWindow`, and each dialog's Escape shortcut is
+`enabled: focusTracker.focusWindow === root` — exactly one is live.
+Dialogs stacked on another (`ConfirmDialog`, `Ps1ConfigDialog`) also call
+`anchorWindow.requestActivate()` on close, so focus — and thus Escape —
+returns to the dialog underneath rather than relying on the window
+manager to do it (on Wayland the compositor may still decide; the
+request is harmless either way).
+
+## src/clientdeck/qml/PromptSetting.qml
+
+### [135] Checkbox + "Selected: <name>" instead of an inline preview
+
+The client dialogs' Advanced section originally embedded the two-terminal
+preview next to "Configure"; the user replaced that with a plain
+"Set bash prompt (PS1)" checkbox, the "Configure" button on the same row,
+and a "Selected: <name>" caption under the checkbox label (indented by
+the checkbox indicator width + spacing so it lines up with the label
+text). The preview now lives only in `Ps1ConfigDialog`.
+
+The checkbox defaults to unchecked (drawn empty in the user's mockup),
+i.e. "leave the account's prompt alone"; "Configure" is disabled and the
+caption dimmed until it's checked. `<name>` is the preset whose PS1
+matches exactly, else "Custom" — same matching rule as the configure
+dialog's preset combo ([133]). `reset()` restores unchecked + default
+PS1; both dialogs call it on every open (still UI-only, [129]).
+
+## src/clientdeck/qml/Ps1ConfigDialog.qml
+
+### [133] When switching presets asks for confirmation
+
+"Has changes" means the PS1 text no longer equals the preset it's based
+on (`basePresetIndex`); a PS1 that matches no preset at all (opened as
+custom) always counts as changed, since switching would lose it just the
+same. In that case picking a preset is deferred: the combo snaps back to
+the current preset and a `ConfirmDialog` (Yes/No) asks first — "Yes"
+applies it, "No" leaves text and combo untouched. Re-picking the same,
+unmodified preset is a no-op. The combo shows "(modified)" after the
+preset name once the text diverges, or "Custom" if it matches none.
+"Reset" deliberately does not ask: it is an explicit request for the
+default PS1 (preset index 0 in `ps1.PRESETS`).
+
 ## src/clientdeck/qml/AddClientDialog.qml
 
 ### [129] "Advanced" options are UI-only for now
 
-The "Advanced" section (in both `AddClientDialog.qml` and, since
-0.3.2+feat.properties, `EditClientDialog.qml`) (Support DBus, Support Wayland/X, Single SSH
-Agent) was added in 0.3.0+feat.properties as layout first; the user
-said the details of what each option does at account-creation time will
-come later. So the three checkboxes are reset (to checked) on every `open()` but
-their values aren't yet passed to `createLinuxUser()`/`create_user.py`
-or stored in the client's config. Wire them in once that behavior is
-specified. Because nothing is stored yet, the edit dialog can't show a
-client's actual settings — it resets them to the same all-checked
-defaults on every `openFor()`; once they're persisted, pre-fill them
-from the client's config there instead, like the other fields.
+The "Advanced" section — Support DBus, Support Wayland/X, Single SSH
+Agent (0.3.0+feat.properties) and the "Set bash prompt (PS1)" setting
+(0.4.0+feat.properties, reworked in 0.5.0) — exists in both `AddClientDialog.qml` and
+(since 0.3.2+feat.properties) `EditClientDialog.qml`. It was added as
+layout first; the user said what each option does at account-creation
+time will be specified later. So on every open the three account
+checkboxes are reset to checked and the PS1 setting to unchecked with the
+default PS1, and none of these values are yet
+passed to `createLinuxUser()`/`create_user.py` or stored in the client's
+config. Wire them in once that behavior is specified. Because nothing is
+stored yet, the edit dialog can't show a client's actual settings; once
+they're persisted, pre-fill them from the client's config in `openFor()`
+like the other fields.
 
 ### [40] Why this is a real top-level `Window`, with `flags` matching Main.qml exactly
 
