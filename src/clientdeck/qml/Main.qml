@@ -123,6 +123,7 @@ Window {
                                 addAppDialog.open()
                             }
                             onEditRequested: editClientDialog.openFor(username, clientName, description, logoPath)
+                            onEditAppRequested: (appIndex) => addAppDialog.openForEdit(username, appIndex, apps[appIndex])
                         }
                     }
 

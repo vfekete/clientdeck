@@ -38,7 +38,7 @@ def test_add_app_to_client_shows_up_in_apps_role(tmp_path):
 
     index = model.index(0, 0)
     apps = model.data(index, ClientListModel.AppsRole)
-    assert apps == [{"name": "Terminal", "command": "x-terminal-emulator", "icon": None, "useSu": True}]
+    assert apps == [{"name": "Terminal", "command": "x-terminal-emulator", "icon": None, "useSu": True, "workingDir": None}]
 
 
 def test_add_app_to_client_with_icon_shows_up_in_apps_role(tmp_path):
@@ -49,7 +49,7 @@ def test_add_app_to_client_with_icon_shows_up_in_apps_role(tmp_path):
 
     index = model.index(0, 0)
     apps = model.data(index, ClientListModel.AppsRole)
-    assert apps == [{"name": "Firefox", "command": "firefox", "icon": "firefox", "useSu": True}]
+    assert apps == [{"name": "Firefox", "command": "firefox", "icon": "firefox", "useSu": True, "workingDir": None}]
 
 
 def test_add_app_to_unknown_client_is_a_noop(tmp_path):
@@ -150,3 +150,39 @@ def test_role_names_exposed_for_qml(tmp_path):
     assert names[ClientListModel.NameRole] == b"name"
     assert names[ClientListModel.UsernameRole] == b"username"
     assert names[ClientListModel.AppsRole] == b"apps"
+
+
+def test_working_dir_shows_up_in_apps_role(tmp_path):
+    model = _model(tmp_path)
+    model.addClient("Acme", "", "acme", "")
+
+    model.addAppToClient("acme", "Term", "term", True, "/srv/acme")
+
+    apps = model.data(model.index(0, 0), ClientListModel.AppsRole)
+    assert apps[0]["workingDir"] == "/srv/acme"
+
+
+def test_update_app_replaces_it_in_place(tmp_path):
+    model = _model(tmp_path)
+    model.addClient("Acme", "", "acme", "")
+    model.addAppToClient("acme", "Term", "term", True, "")
+    model.addAppToClient("acme", "Editor", "editor", True, "")
+
+    model.updateApp("acme", 0, "Terminal", "term --login", False, "/w", "utilities-terminal")
+
+    apps = model.data(model.index(0, 0), ClientListModel.AppsRole)
+    assert apps == [
+        {"name": "Terminal", "command": "term --login", "icon": "utilities-terminal", "useSu": False, "workingDir": "/w"},
+        {"name": "Editor", "command": "editor", "icon": None, "useSu": True, "workingDir": None},
+    ]
+
+
+def test_remove_app_from_client(tmp_path):
+    model = _model(tmp_path)
+    model.addClient("Acme", "", "acme", "")
+    model.addAppToClient("acme", "Term", "term", True, "")
+    model.addAppToClient("acme", "Editor", "editor", True, "")
+
+    model.removeAppFromClient("acme", 0)
+
+    assert [a["name"] for a in model.data(model.index(0, 0), ClientListModel.AppsRole)] == ["Editor"]

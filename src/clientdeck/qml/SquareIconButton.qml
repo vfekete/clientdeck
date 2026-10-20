@@ -22,6 +22,8 @@ Rectangle {
 
     // Plain press+release — see [78].
     signal clicked()
+    // Right-button press+release; never starts a drag — see [140].
+    signal rightClicked()
     signal dragStarted()
     signal dragPositionChanged(real sceneX, real sceneY)
     signal dragFinished()
@@ -35,7 +37,7 @@ Rectangle {
     radius: Theme.cornerRadius
     opacity: ghosted ? 0.5 : (enabled ? 1.0 : 0.45)
     // Always solid/opaque, unlike the glass panel behind it — see [84].
-    color: mouseArea.pressed
+    color: mouseArea.pressed && !mouseArea.rightPress
         ? Theme.accent
         : (mouseArea.containsMouse ? Theme.surfaceHover : Theme.surface)
     border.width: 1
@@ -77,6 +79,7 @@ Rectangle {
         id: mouseArea
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         // Prevents the parent Flickable/ScrollView from stealing a drag — see docs/comments-details.md [87].
         preventStealing: true
 
@@ -84,15 +87,17 @@ Rectangle {
         property real pressX: 0
         property real pressY: 0
         property bool dragging: false
+        property bool rightPress: false
 
         onPressed: (mouse) => {
             pressX = mouse.x
             pressY = mouse.y
             dragging = false
+            rightPress = mouse.button === Qt.RightButton
         }
 
         onPositionChanged: (mouse) => {
-            if (root.draggable && !dragging && pressed) {
+            if (root.draggable && !dragging && pressed && !rightPress) {
                 const dx = mouse.x - pressX
                 const dy = mouse.y - pressY
                 if (Math.sqrt(dx * dx + dy * dy) > dragThreshold) {
@@ -107,7 +112,11 @@ Rectangle {
         }
 
         onReleased: {
-            if (dragging) {
+            if (rightPress) {
+                rightPress = false
+                if (containsMouse)
+                    root.rightClicked()
+            } else if (dragging) {
                 dragging = false
                 root.dragFinished()
             } else if (containsMouse) {

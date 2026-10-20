@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Runs ClientDeck from a source checkout, together with the
-# clientdeck-loader splash screen. See docs/comments-details.md [116].
+# clientdeck-loader splash screen, in MOCK mode: the privileged scripts
+# (user creation/deletion, su/xhost launches) only print what they would
+# run. See docs/comments-details.md [116], [138]; run-real.sh is the same
+# with the actions really executed.
 set -euo pipefail
+
+export CLIENTDECK_MODE=mock
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"

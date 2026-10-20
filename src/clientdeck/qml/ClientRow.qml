@@ -14,6 +14,7 @@ RowLayout {
     property var apps: []
 
     signal launchApp(int appIndex)
+    signal editAppRequested(int appIndex)
     signal moveAppRequested(int fromIndex, int toIndex)
     signal addAppRequested()
     signal editRequested()
@@ -132,6 +133,8 @@ RowLayout {
                 tooltipText: modelData.name
 
                 onClicked: root.launchApp(appButton.index)
+                // Right-click edits the app — see [140].
+                onRightClicked: root.editAppRequested(appButton.index)
 
                 onDragStarted: {
                     appsContainer.draggedIndex = appButton.index

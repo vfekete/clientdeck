@@ -34,6 +34,7 @@ from .ps1 import (
     render_title,
 )
 from .paths import get_qml_dir, get_resources_dir, get_scripts_dir, is_packaged_build
+from .run_mode import is_real_mode, script_mode_args
 from .username import username_or_group_exists
 from .window_placement import MonitorInfo, resolve_startup_geometry
 
@@ -47,19 +48,22 @@ class _ClientProvisioner(QObject):
     docs/comments-details.md [3].
     """
 
+    def __init__(self, real: bool, parent: QObject | None = None):
+        super().__init__(parent)
+        self._mode_args = script_mode_args(real)
+
     @Slot(str, result=bool)
     def createLinuxUser(self, username: str) -> bool:
         # Invoked by its own shebang, not sys.executable — see [4].
-        result = subprocess.run(["pkexec", str(get_scripts_dir() / "create_user.py"), username])
-        return result.returncode == 0
+        argv = ["pkexec", str(get_scripts_dir() / "create_user.py"), *self._mode_args, username]
+        return subprocess.run(argv).returncode == 0
 
     @Slot(str, result=bool)
     def deleteLinuxUser(self, username: str) -> bool:
         # Removes the old account when a client is renamed and the user
-        # opts to delete rather than orphan it. See [3] for the MOCK_MODE
-        # caveat.
-        result = subprocess.run(["pkexec", str(get_scripts_dir() / "delete_user.py"), username])
-        return result.returncode == 0
+        # opts to delete rather than orphan it. Mocked unless real mode — see [138].
+        argv = ["pkexec", str(get_scripts_dir() / "delete_user.py"), *self._mode_args, username]
+        return subprocess.run(argv).returncode == 0
 
 
 class _UsernameChecker(QObject):
@@ -143,9 +147,10 @@ class _AppLauncher(QObject):
     See docs/comments-details.md [5].
     """
 
-    def __init__(self, store: ConfigStore, parent: QObject | None = None):
+    def __init__(self, store: ConfigStore, real: bool, parent: QObject | None = None):
         super().__init__(parent)
         self._store = store
+        self._real = real
 
     @Slot(str, int)
     def launchApp(self, username: str, app_index: int) -> None:
@@ -156,12 +161,12 @@ class _AppLauncher(QObject):
         command = shlex.split(app.command)
         if not command:
             return
-        _spawn_launch_script(username, command, workdir=app.working_dir, gui=True)
+        _spawn_launch_script(username, command, workdir=app.working_dir, gui=True, real=self._real)
 
 
-def _spawn_launch_script(username: str, command: list[str], workdir: str | None, gui: bool) -> None:
+def _spawn_launch_script(username: str, command: list[str], workdir: str | None, gui: bool, real: bool) -> None:
     # Invoked by its own shebang — see [4].
-    argv = [str(get_scripts_dir() / "launch_as_user.py"), "--username", username]
+    argv = [str(get_scripts_dir() / "launch_as_user.py"), *script_mode_args(real), "--username", username]
     if workdir:
         argv += ["--workdir", workdir]
     if gui:
@@ -194,12 +199,19 @@ def run(argv: list[str] | None = None) -> int:
         sigint_pump.timeout.connect(lambda: None)
         sigint_pump.start(200)
 
+    # Packaged binary: always real; source: mock unless CLIENTDECK_MODE=real — see [138].
+    real_mode = is_real_mode(packaged=is_packaged_build())
+    if real_mode:
+        print("ClientDeck: REAL mode — user creation/deletion and su/xhost launches will actually run.", file=sys.stderr)
+    else:
+        print("ClientDeck: mock mode — privileged scripts only print what they would run.", file=sys.stderr)
+
     store = ConfigStore()
     client_model = ClientListModel(store)
-    client_provisioner = _ClientProvisioner()
+    client_provisioner = _ClientProvisioner(real_mode)
     username_checker = _UsernameChecker()
     desktop_apps_provider = _DesktopAppsProvider()
-    app_launcher = _AppLauncher(store)
+    app_launcher = _AppLauncher(store, real_mode)
     ps1_renderer = _Ps1Renderer()
     focus_tracker = _FocusTracker(app)
 

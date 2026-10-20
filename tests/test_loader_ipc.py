@@ -69,7 +69,7 @@ def test_maybe_launch_loader_skips_when_not_packaged(monkeypatch):
 
 
 def test_maybe_launch_loader_connects_without_launching_when_socket_env_already_set(monkeypatch):
-    # A wrapper script (e.g. run.sh) already started its own loader and
+    # A wrapper script (e.g. run-mocked.sh) already started its own loader and
     # set the channel up — see docs/comments-details.md [115]. The app
     # must connect to it, not spawn a second loader process.
     monkeypatch.setattr(loader_ipc, "is_packaged_build", lambda: True)

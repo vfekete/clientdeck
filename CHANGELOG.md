@@ -1,5 +1,198 @@
 # Changelog
 
+## 0.9.1+feat.properties
+
+Add/Edit application: the working directory field got a "Browse…"
+button that opens a directory picker.
+
+**User prompt driving this change:** "shorten the current working
+directory input box and right after it add button 'browse' so user can
+pick a directory for himself. Use 'open directory' dialog, not 'open
+file' dialog for it."
+
+The field and a "Browse…" button now share a row (field fills the rest,
+button right-aligned in line with the icon's "Browse…"); the button opens
+a Qt Quick `FolderDialog` (directories only), starting in the folder
+already typed if it's an absolute path, and writes the chosen directory
+back into the field. Side fix: chosen paths are now percent-decoded, so
+an icon picked from a path containing spaces is stored correctly
+(previously kept as `%20`). See docs/comments-details.md [141]; CLAUDE.md
+spec updated.
+
+Verified headlessly: layout (field 306px + button, aligned with the icon
+row), the picker is a `FolderDialog` while the icon one stays a
+`FileDialog`, it opens at the typed folder, accepting writes the folder
+into the field, and `file:///home/me/My%20Projects/acme` →
+`/home/me/My Projects/acme`. The native GNOME folder chooser itself wasn't
+exercised (offscreen uses Qt's fallback dialog).
+
+## 0.9.0+feat.properties
+
+Right-clicking an app button opens an "Edit application" dialog — the
+"Add application" dialog in edit mode — with a confirmed "Remove".
+
+**User prompt driving this change:** "now, similarly to 'edit client',
+use the 'add application' dialog window as base for 'update existing'
+once user right click on the icon. Add to the new edit dialog posibility
+to remove the application. This action must be acknowledged by the
+user."
+
+- `AddAppDialog.qml` gained an edit mode (`openForEdit()`): titled "Edit
+  application", pre-filled with the app's icon, name, command, working
+  directory and su setting; "Pick existing…"/"Clear" work as when adding;
+  buttons "Remove" (left, red) / "Cancel" / "Apply". One dialog for both,
+  rather than a duplicated file like EditClientDialog, so the two can't
+  drift.
+- "Remove" asks first in a themed confirm ("Remove "<app>" from this
+  client? This cannot be undone." — "Remove"/"Cancel"); Cancel returns to
+  the edit dialog.
+- `SquareIconButton` emits `rightClicked()`; a right-button press never
+  starts a drag. `ClientRow` → `editAppRequested(index)` → Main opens the
+  dialog.
+- New `ConfigStore.update_app()` + `ClientListModel.updateApp()` (in
+  place, keeps the app's position); the `apps` role now includes
+  `workingDir`. `ThemedButton` gained a `danger` style. +5 tests.
+
+See docs/comments-details.md [140]. CLAUDE.md spec updated (app button
+right-click, new "Editing or removing an app" section) — replacing the
+earlier "the only interaction the button offers" line.
+
+Verified headlessly with real mouse events on a seeded client: right-drag
+doesn't reorder; right-click opens the pre-filled edit dialog; Apply
+saves the edited command in place; Remove → confirm → Cancel keeps the
+app, Remove deletes it and closes both dialogs; "+" afterwards is a clean
+add dialog. Not verified on a real screen.
+
+## 0.8.1+feat.properties
+
+Fix: "Pick existing…" in "Add application" stretched the dialog onto
+another monitor.
+
+**User prompt driving this change:** "the 'pick existing' opens on next
+monitor?"
+
+0.8.0 made the dialog's height follow its content so the form could grow
+for the "Based on" row — but in picker mode that content includes the
+whole discovered-apps list, whose implicit height is the full list's
+height. With a real system's few hundred `.desktop` apps the window
+became ~13,700px tall (reproduced headlessly with 300 fake apps), i.e.
+it spilled across monitors. The picker is now a fixed 480px with the
+list scrolling inside it; only the form view grows to fit. Re-measured:
+picker 480px with 300 apps; the form still grows after a pick. See
+docs/comments-details.md [139] (updated).
+
+## 0.8.0+feat.properties
+
+"Add application" dialog reworked: the custom-command form is the
+default, and "Pick existing…" fills the form instead of adding the app
+directly, so command-line parameters can be added first.
+
+**User prompt driving this change:** (spec pasted by the user)
+"# Add application dialog window changes
+## Motivation
+ - It's nice to have list of available applications but I want to be
+   able to give them command line parameter and working directory
+## Changes
+ - change the dialog, so the 'custom command'  will be default
+ - Put there icon preview. If there is no icon selected, use the 'no item
+   icon' (dark or light depending on theme)
+ - the 'pick existing' button will allow to select existing application
+   like before, but:
+    - if the application is selected, it is selection for 'custom
+      command', so the name will be filled automatically, icon too and
+      launch command
+    - working directory is left untouched
+ - the 'pick existing' Cancel button will move user back to 'custom
+   command' window without selecting anything
+ - it should be possible to 'clear' application selection once selected"
+
+Follow-up answers: "if you've already typed a Name or Launch command and
+then pick an app, should the pick overwrite those fields silently? -
+yes" / "What "Clear" restores - only application selected form list." /
+"Picking the icon - good point. remove this part, replace it with icon
+itself with button browse (i keep the layout on you, so it will be
+consistent with the application)" / "The su checkbox: If the
+application is taken from the list check it always. Upon 'clear' it
+should be put to the state it had before."
+
+- Form (default): icon preview + "Browse…" (same row layout as "Add
+  client"'s logo; no-item placeholder when unset or unresolvable), Name,
+  Launch command, Working directory, "Run as su", Cancel/Add. The
+  free-text icon field is gone.
+- "Pick existing…" → searchable list; picking returns to the form with
+  name, command and icon filled (overwriting), su checked, working dir
+  untouched; the list's Cancel (and Escape) go back to the form unchanged.
+- After a pick: "Based on: <app>" + "Clear" — empties name/command/icon
+  and restores su to its pre-pick state (even after several picks).
+- The discovered list now also shows the placeholder for unresolvable
+  icons (previously blank), matching the preview.
+- Dialog grows to fit the form (min. 480px) instead of squeezing it.
+
+See docs/comments-details.md [139] (new), [51]/[52] updated, [53]
+retired. CLAUDE.md spec updated. Verified headlessly with stubbed app
+discovery: default form, picker Cancel, pick overwrite, working dir kept,
+su forced on and restored by Clear (incl. after two picks), placeholder
+for a bad icon, and the saved app (edited command, working dir, su,
+icon path). The real file dialog ("Browse…") and real discovered apps
+weren't exercised.
+
+## 0.7.1+feat.properties
+
+The packaged binary built by `build.sh` now always runs in real mode.
+
+**User prompt driving this change:** "let the `build.sh` builds only real
+version"
+
+`run_mode.is_real_mode()` now takes `packaged` (from
+`paths.is_packaged_build()`): the built binary is always real and
+`CLIENTDECK_MODE` can't switch it to mock; source runs are unchanged
+(mock unless `CLIENTDECK_MODE=real`, i.e. `run-real.sh`). Decided at
+runtime, so `build.sh` needs no extra flag — it just says so in its
+output ("Building the REAL-mode binary…", and on "Done"). +1 test; see
+docs/comments-details.md [138] (updated). Verified headlessly by faking
+the packaged-build marker: the app reports REAL mode even with
+`CLIENTDECK_MODE=mock`. `build.sh` itself was only syntax-checked, not
+run.
+
+## 0.7.0+feat.properties
+
+New `run-real.sh` that really executes the privileged actions; the
+existing mocked run is now `run-mocked.sh` (renamed from `run.sh`).
+
+**User prompt driving this change:** "create `run-real.sh` where the
+commands you want to execute will be actually executed. Move current
+(mocked) functionality to `run-mocked.sh` (and cancel or rename if it is
+enough existing `run.sh`)"
+
+- `run.sh` → `run-mocked.sh` (git mv; sets `CLIENTDECK_MODE=mock`).
+  `run-real.sh` is the same script with `CLIENTDECK_MODE=real` and a
+  warning line on start. `run-clientdesk.sh` (no splash) and a plain
+  `uv run python -m clientdeck` leave the mode unset = mock.
+- New `src/clientdeck/run_mode.py` (+ `tests/test_run_mode.py`): reads
+  `CLIENTDECK_MODE` (only `real` means real). `app.py` passes `--real`
+  to `create_user.py`/`delete_user.py` (through `pkexec`) and to
+  `launch_as_user.py` when in real mode, and prints the active mode to
+  stderr at startup.
+- The three scripts gained a `--real` flag that overrides their
+  `MOCK_MODE = True` default for that call; without it they stay mocked,
+  as before. A flag rather than an env var because `pkexec` clears the
+  environment. +6 script tests (`--real` runs the real commands, no flag
+  stays mocked).
+
+See docs/comments-details.md [138] (new), [3]/[19]/[116]/[120] updated.
+CLAUDE.md's "Environment constraints" now names both run scripts.
+
+Verified without running anything real: the app builds `pkexec
+create_user.py --real acme` / `delete_user.py --real` /
+`launch_as_user.py --real …` only in real mode (subprocess stubbed), both
+run scripts export the right mode (stubbed `uv`/`make`), and the app
+starts headlessly in both modes. **Not verified**: actually creating/
+deleting a user or launching an app as another user — that needs
+`./run-real.sh` on the host. Note the polkit policy file is still the
+placeholder from before (`exec.path` = `/usr/bin/python3`), so on the
+real host pkexec may refuse or prompt differently until it's installed
+properly.
+
 ## 0.6.0+feat.properties
 
 PS1 dialog: the "Insert" combo box is replaced by colon hints typed

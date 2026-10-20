@@ -191,3 +191,27 @@ def test_save_leaves_no_leftover_temp_files(tmp_path):
 
     leftovers = list(tmp_path.glob(".config-*.tmp"))
     assert leftovers == []
+
+
+def test_update_app_replaces_in_place_and_persists(tmp_path):
+    store = ConfigStore(path=tmp_path / "config.json")
+    store.add_client(ClientEntry(name="Acme", description="", username="acme"))
+    store.add_app("acme", AppEntry(name="Terminal", command="term"))
+    store.add_app("acme", AppEntry(name="Editor", command="editor"))
+
+    store.update_app("acme", 1, AppEntry(name="Code", command="code --new-window", working_dir="/w", use_su=False))
+
+    reloaded = ConfigStore(path=store.path)
+    assert [a.name for a in reloaded.clients[0].apps] == ["Terminal", "Code"]
+    assert reloaded.clients[0].apps[1].working_dir == "/w"
+    assert reloaded.clients[0].apps[1].use_su is False
+
+
+def test_update_app_out_of_range_is_a_noop(tmp_path):
+    store = ConfigStore(path=tmp_path / "config.json")
+    store.add_client(ClientEntry(name="Acme", description="", username="acme"))
+    store.add_app("acme", AppEntry(name="Terminal", command="term"))
+
+    store.update_app("acme", 5, AppEntry(name="x", command="x"))
+
+    assert [a.name for a in ConfigStore(path=store.path).clients[0].apps] == ["Terminal"]

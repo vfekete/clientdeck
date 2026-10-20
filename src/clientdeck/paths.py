@@ -13,7 +13,7 @@ from pathlib import Path
 
 def is_packaged_build() -> bool:
     """True when running as the compiled Nuitka onefile binary, False for a
-    plain source checkout (e.g. via run.sh/`uv run python -m clientdeck`).
+    plain source checkout (e.g. via run-mocked.sh/`uv run python -m clientdeck`).
     Used beyond just path resolution — see [17]."""
     return getattr(sys.modules.get("__main__"), "__compiled__", None) is not None
 

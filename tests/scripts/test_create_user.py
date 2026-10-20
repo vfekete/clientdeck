@@ -90,3 +90,20 @@ def test_parse_args_requires_username():
 def test_parse_args_happy_path():
     args = create_user.parse_args(["acme"])
     assert args.username == "acme"
+
+
+def test_real_flag_runs_the_command_despite_mock_mode_default(monkeypatch):
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd: calls.append(list(cmd)) or _FakeCompletedProcess(0))
+
+    assert create_user.MOCK_MODE is True
+    assert create_user.main(["--real", "acme"]) == 0
+    assert calls == [['useradd', '--create-home', '--user-group', 'acme']]
+
+
+def test_without_real_flag_main_stays_mocked(monkeypatch):
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not run")))
+
+    assert create_user.main(["acme"]) == 0

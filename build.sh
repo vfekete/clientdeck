@@ -11,6 +11,11 @@ DIST_DIR="$REPO_ROOT/dist"
 SPEC_FILE="$REPO_ROOT/src/clientdeck/pysidedeploy.spec"
 DEPLOYMENT_DIR="$REPO_ROOT/src/clientdeck/deployment"
 
+# The built binary always runs in REAL mode (privileged scripts really
+# create/delete users and launch via su/xhost) — mock mode exists only for
+# source runs (run-mocked.sh). See docs/comments-details.md [138].
+echo "==> Building the REAL-mode binary (no mock mode in packaged builds)"
+
 echo "==> Checking version consistency (pyproject.toml vs. clientdeck.__version__)"
 VERSION="$(uv run python tools/check_versions.py)"
 echo "    version: $VERSION"
@@ -77,4 +82,4 @@ chmod +x "$FINAL_BIN"
 echo "==> Cleaning up deploy-time leftovers"
 rm -rf "$SPEC_FILE" "$DEPLOYMENT_DIR" "$REPO_ROOT"/src/clientdeck/deploy_main.py
 
-echo "==> Done: $FINAL_BIN"
+echo "==> Done: $FINAL_BIN (REAL mode: really creates/deletes users)"

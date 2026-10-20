@@ -182,6 +182,14 @@ class ConfigStore:
         del client.apps[index]
         self.save()
 
+    def update_app(self, username: str, index: int, app: AppEntry) -> None:
+        """Replaces one of a client's apps in place (edit-app dialog)."""
+        client = self.get_client(username)
+        if client is None or not (0 <= index < len(client.apps)):
+            return
+        client.apps[index] = app
+        self.save()
+
     def move_app(self, username: str, from_index: int, to_index: int) -> None:
         """Reorders one client's apps (drag-and-drop in ClientRow.qml). See [13]."""
         client = self.get_client(username)

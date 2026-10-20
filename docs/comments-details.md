@@ -51,10 +51,10 @@ an infrequent "add client" action; not attempted asynchronously here to
 avoid the added complexity of a QML-visible pending state for something
 this rare.
 
-While the app is in UI/UX-prototyping phase, `create_user.py`'s own
-MOCK_MODE means this still runs the real pkexec authentication flow but
-does not actually create a Linux user — see that script's module
-docstring. The same MOCK_MODE caveat applies to `deleteLinuxUser` below.
+In mock mode (the default; `run-mocked.sh`) this still runs the real
+pkexec authentication flow but `create_user.py` does not actually create
+a Linux user; in real mode (`run-real.sh`) it is called with `--real` and
+does. Same for `deleteLinuxUser` below. See [19], [138].
 
 ### [4] Why `pkexec <script>` invokes the script by its own shebang
 
@@ -80,7 +80,7 @@ QTimer forces that handoff regularly, so the handler (which triggers the
 normal `app.quit()` shutdown path, saving window state via `aboutToQuit`
 like any other quit) actually fires.
 
-Source mode only (`run.sh` / `uv run python -m clientdeck`): confirmed
+Source mode only (`run-mocked.sh`/`run-real.sh` / `uv run python -m clientdeck`): confirmed
 working there, but the packaged onefile binary is actually two processes
 (a bootstrap plus the extracted payload it execs) and SIGINT delivered to
 that process group does not reach this handler the same way — see
@@ -328,13 +328,14 @@ actually stored for it.
 
 ### [19] MOCK_MODE
 
-The app is currently in UI/UX-prototyping phase, so these three scripts
-don't perform their real privileged action (`useradd`/`userdel`/`su`+
-`xhost`) — they still require root, so the real pkexec authentication
-dialog can be exercised end-to-end, but the actual mutating command is
-replaced with a printed line saying what would have run. Flip `MOCK_MODE`
-to `False` in each script once prototyping is done and the real action
-should happen.
+By default these three scripts don't perform their real privileged
+action (`useradd`/`userdel`/`su`+`xhost`) — they still require root, so
+the real pkexec authentication dialog can be exercised end-to-end, but
+the actual mutating command is replaced with a printed line saying what
+would have run. `MOCK_MODE = True` is that default; passing `--real`
+overrides it for one call. The app passes `--real` only in real mode
+(`run-real.sh`, see [138]); running a script by hand without `--real`
+stays mocked.
 
 ## tools/check_versions.py
 
@@ -1006,25 +1007,98 @@ Checkboxes have the same problem and fix; that styling now lives in the
 shared `ThemedCheckBox.qml` (extracted in 0.3.0+feat.properties from this
 dialog's manual-entry checkbox), used everywhere a checkbox appears.
 
-### [51] Why a missing/unresolvable app icon just shows nothing
+### [51] What a missing/unresolvable app icon shows
 
 Discovered `.desktop` apps' `Icon=` value is either an absolute path to
 an image file, or an icon-theme name to resolve via the platform's icon
-theme — "if exists" per the request: an empty/unresolvable one just
-shows no icon rather than a broken-image placeholder.
+theme. Originally an empty/unresolvable one showed nothing; it now shows
+the themed no-item placeholder ([126]) — empty in both the list and the
+form preview, and unresolvable ones too (image `Error`, or a provider
+result with no size), so the list and the preview behave the same.
 
-### [52] Why the pick-existing view has its own Cancel button
+### [52] What the pick-existing view's Cancel does
 
-The pick-existing view previously had no way to back out of the dialog
-at all besides Escape/clicking outside — the manual-entry view already
-has its own Cancel below.
+Since 0.8.0+feat.properties it returns to the custom-command form without
+picking anything (user spec), rather than closing the dialog — the form
+keeps whatever was typed. Escape in the picker does the same; Escape in
+the form closes the dialog.
 
-### [53] Why manual apps get a free-text icon field
+### [53] Retired — free-text icon field
 
-Only way to get an icon on a manually-added app (e.g. Docker, which
-typically has no launchable .desktop entry to discover an icon from) —
-an absolute image path or an icon-theme name, same as a discovered app's
-`Icon=` value.
+Removed in 0.8.0+feat.properties: the icon is now set by "Browse…" (an
+image file) or by picking an existing app (its path or theme name), with
+a live preview — see [139].
+
+### [140] Editing/removing an app reuses the add dialog
+
+User request: like "edit client", base the app editor on the "Add
+application" dialog, opened by right-clicking the app's button, and let
+it remove the app — confirmed by the user. Unlike EditClientDialog (a
+separate file that duplicated AddClientDialog's fields), this is a mode
+of the same `AddAppDialog`: `editIndex >= 0` switches title,
+Add → Apply, and shows Remove, so the form/picker/Clear behavior ([139])
+can't drift between the two. `open()` is add mode; `openForEdit()`
+resets via the same `resetAndShow()` and then pre-fills. (Not named
+`show()` — that would shadow `QWindow::show`.)
+
+- `SquareIconButton` accepts both buttons in its single `MouseArea`
+  (which must keep the drag grab, [87]) and tracks `rightPress`: a right
+  press never starts a drag ([75]-style reordering stays left-only),
+  doesn't flash the pressed/accent color, and emits `rightClicked()` on
+  release inside the button — the same release-to-activate rule as
+  `clicked()`.
+- `ClientListModel`'s `apps` role now also carries `workingDir`, so the
+  form can be pre-filled; Apply goes through the new
+  `updateApp()`/`ConfigStore.update_app()`, which replaces the entry in
+  place (row position kept).
+- Remove opens a `ConfirmDialog` anchored to this dialog ([48]) naming
+  the app as it was when the dialog opened (`editAppName`, not the
+  possibly-edited Name field). Cancel returns to the edit dialog; Remove
+  calls the existing `removeAppFromClient()` and closes both.
+- `ThemedButton.danger` (danger-colored text, `dangerSurface` hover,
+  `danger` fill while pressed with normal text so it stays readable) is
+  new for this button.
+
+### [141] Working directory "Browse…" uses `FolderDialog`
+
+User request: a "Browse…" right after a shortened working-directory field,
+using an "open directory" dialog rather than an "open file" one — so
+Qt Quick's `FolderDialog` (directories only), not `FileDialog`. It starts
+in the folder already typed, if the field holds an absolute path (Qt
+silently falls back to its own default for one that doesn't exist).
+
+Both this and the icon's "Browse…" convert the chosen URL with
+`urlToPath()`, which also percent-decodes it: the icon picker used to
+just strip `file://`, so a path with spaces was stored as `…My%20Icons…`
+and never loaded.
+
+### [139] Form-first "Add application", picking fills the form
+
+User spec: the discovered-apps list is handy, but picking one must leave
+room for command-line parameters, so the custom-command form is the
+default view and picking only *pre-fills* it.
+
+- A pick overwrites name, launch command and icon (confirmed: silently,
+  no prompt), sets "Run as su" on, and leaves the working directory
+  alone. The `.desktop` file's own `Path=` is therefore not used any
+  more; field codes (`%U` etc.) are already stripped from `Exec=` at
+  discovery.
+- "Clear" undoes the selection: empties those three fields and restores
+  "Run as su" to `useSuBeforePick`, captured only on the *first* pick of
+  a series, so picking A then B then Clear returns to the state before A.
+  It doesn't try to restore text typed before the pick — the user chose
+  "clear only the selected application".
+- `iconValue` holds an absolute path or a theme name; `iconUrl()` maps it
+  to `file://…` or `image://theme/…`. The preview row reuses
+  AddClientDialog's logo-row layout ([42]): square preview, spacer,
+  "Browse…".
+- Window height: fixed 480 in the picker, `max(480, implicit height)` in
+  the form — the form grows when the "Based on" row appears instead of
+  squeezing the buttons into the bottom edge. The picker must stay fixed:
+  its `ScrollView`'s implicit height is the whole list's content height,
+  so with a real system's few hundred `.desktop` apps a content-sized
+  window became ~13,700px tall and ended up spanning onto another
+  monitor (0.8.0 bug, fixed in 0.8.1).
 
 ## src/clientdeck/qml/ClientRow.qml
 
@@ -1603,7 +1677,7 @@ fall back to running with no splash at all" failure mode.
 Per the blueprint's "App-side responsibilities" #1: "only [self-]launch
 ... AND no channel is already set up (avoid double-launching if a dev
 wrapper script already started one for a source checkout)". A wrapper
-script (e.g. `run.sh`) that starts its own `clientdeck-loader` and sets
+script (e.g. `run-mocked.sh`/`run-real.sh`) that starts its own `clientdeck-loader` and sets
 `CLIENTDECK_LOADER_SOCKET` before invoking the app is exactly that case
 — the app must still *connect* and speak the protocol (or the wrapper's
 splash would never receive `running` and would just sit until its own
@@ -1614,7 +1688,28 @@ build launched by something unusual — the packaged-build self-launch
 path only exists for the plain "just run the binary" case, with no
 wrapper involved at all.
 
-## src/clientdeck/app.py (loader wiring)
+## src/clientdeck/run_mode.py
+
+### [138] Mock vs. real mode is chosen per app run, passed as `--real`
+
+User request: a `run-real.sh` that really executes the privileged
+actions, next to the mocked behavior (now `run-mocked.sh`). The scripts
+used to be mock-only via a hardcoded `MOCK_MODE = True`.
+
+The packaged binary built by `build.sh` is always real — per the user,
+the build produces only the real version; `is_packaged_build()` decides
+it at runtime, so no build-time flag or second artifact is needed, and
+`CLIENTDECK_MODE` cannot switch a shipped binary into mock mode. From a
+source checkout the mode comes from `CLIENTDECK_MODE` (`real` → real;
+anything else or unset → mock, so a plain `uv run python -m clientdeck`
+or `run-clientdesk.sh` stays safe by default). It
+reaches the scripts as an explicit `--real` argv flag, not an inherited
+environment variable, because `pkexec` deliberately clears the
+environment of the program it runs — an env var set on the app would
+never reach `create_user.py`/`delete_user.py`. The flag keeps each
+script's own contract explicit too: no `--real`, no change to the
+system. The app prints which mode it is in to stderr on startup.
+
 
 ### [113] Why `maybe_launch_loader()` is called before `QGuiApplication` is even constructed
 
@@ -1635,12 +1730,12 @@ first (per the blueprint's Qt-specific timing note) gives the event loop
 a chance to actually paint before the loader is told it's safe to fade
 out.
 
-## run.sh
+## run-mocked.sh, run-real.sh
 
 ### [116] Why this wrapper builds+launches the loader itself, and why not `exec`
 
 The app only *self*-launches a loader when packaged (see [112]/[115]) —
-a source checkout run via `run.sh` would otherwise never show a splash
+a source checkout run via these scripts would otherwise never show a splash
 at all. This wrapper fills that gap the same way the blueprint frames
 dev-mode splash support: an external script starts the loader and sets
 `CLIENTDECK_LOADER_SOCKET` before starting the app, and
@@ -1648,8 +1743,7 @@ dev-mode splash support: an external script starts the loader and sets
 means the app just connects to it rather than launching its own.
 
 The final `uv run python -m clientdeck "$@"` is deliberately *not*
-`exec`'d (unlike this file's own previous, splash-less version, now
-`run-clientdesk.sh`): `exec` replaces the shell process image outright,
+`exec`'d (unlike the original, splash-less `run-clientdesk.sh`): `exec` replaces the shell process image outright,
 which would skip the `trap cleanup EXIT` below entirely — bash never
 runs EXIT traps across an `exec`, since the shell doesn't exit in the
 normal sense, it *becomes* the new program. Running the app as a plain
@@ -1664,13 +1758,19 @@ pre-built) is cheap: `make` no-ops once the binary is already up to
 date, so this only costs real time the first run or after `main.c`
 changes.
 
+The two scripts are identical apart from `CLIENTDECK_MODE` (mock/real,
+see [138]) and `run-real.sh`'s warning line. They were one `run.sh`
+until 0.7.0+feat.properties; duplicated rather than one sourcing the
+other so each reads standalone and can't be flipped to the other mode by
+an inherited environment variable.
+
 ## run-loader.sh
 
-### [120] Why this script behaves differently from `run.sh` in two ways
+### [120] Why this script behaves differently from `run-mocked.sh`/`run-real.sh` in two ways
 
 Exists solely for manually previewing/tuning the splash by itself (per
 the blueprint's own verification checklist: "run standalone with no
-channel/env var set"), so it deliberately diverges from `run.sh` (see
+channel/env var set"), so it deliberately diverges from those (see
 [116]) in two ways:
 
 - **`exec`, not a foreground command + cleanup trap**: there's nothing
@@ -1678,8 +1778,8 @@ channel/env var set"), so it deliberately diverges from `run.sh` (see
   directory (this script never sets `CLIENTDECK_LOADER_SOCKET` at all,
   which is exactly what puts the loader into standalone mode — see
   [106]) — so `exec`'ing straight into the loader binary is safe and
-  simpler, unlike `run.sh`'s reasons for avoiding it.
-- **A loader build failure is not swallowed**: `run.sh` treats a failed
+  simpler, unlike their reasons for avoiding it.
+- **A loader build failure is not swallowed**: they treat a failed
   `make -C src/loader` as "fine, just run with no splash" (see [112]),
   because there the app is the point and the splash is optional. Here
   the loader *is* the point of running the script at all, so `set -e`
