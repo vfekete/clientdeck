@@ -51,10 +51,10 @@ an infrequent "add client" action; not attempted asynchronously here to
 avoid the added complexity of a QML-visible pending state for something
 this rare.
 
-While the app is in UI/UX-prototyping phase, `create_user.py`'s own
-MOCK_MODE means this still runs the real pkexec authentication flow but
-does not actually create a Linux user — see that script's module
-docstring. The same MOCK_MODE caveat applies to `deleteLinuxUser` below.
+In mock mode (the default; `run-mocked.sh`) this still runs the real
+pkexec authentication flow but `create_user.py` does not actually create
+a Linux user; in real mode (`run-real.sh`) it is called with `--real` and
+does. Same for `deleteLinuxUser` below. See [19], [138].
 
 ### [4] Why `pkexec <script>` invokes the script by its own shebang
 
@@ -80,7 +80,7 @@ QTimer forces that handoff regularly, so the handler (which triggers the
 normal `app.quit()` shutdown path, saving window state via `aboutToQuit`
 like any other quit) actually fires.
 
-Source mode only (`run.sh` / `uv run python -m clientdeck`): confirmed
+Source mode only (`run-mocked.sh`/`run-real.sh` / `uv run python -m clientdeck`): confirmed
 working there, but the packaged onefile binary is actually two processes
 (a bootstrap plus the extracted payload it execs) and SIGINT delivered to
 that process group does not reach this handler the same way — see
@@ -239,7 +239,7 @@ Actual bundling (see `build.sh` / `pysidedeploy.spec`):
   not a subdirectory of it), so `build.sh` bundles it explicitly via
   Nuitka's `--include-raw-dir` (not `--include-data-dir` — see [22] for
   why), landing at `<root>/scripts`.
-- `resources/` (icons, the no-logo placeholders — see [125]) is likewise
+- `resources/` (icons, the no-item placeholders — see [125]) is likewise
   a sibling of the package, bundled via `--include-data-dir` (fine here:
   unlike `src/scripts/`, it holds no `.py` files for Nuitka to silently
   drop), landing at `<root>/resources`.
@@ -260,49 +260,51 @@ Nuitka onefile injects `__nuitka_binary_dir` into `builtins` at runtime
 (see the packaging blueprint) pointing at that directory; falls back to
 the running executable's own directory if that hint isn't present.
 
-### [125] No-logo placeholder: resolving `resources/` at runtime, and the light/dark choice
+### [125] No-item placeholder: resolving `resources/` at runtime, and the light/dark choice
 
 Until now nothing under `resources/` was ever read by the running app —
 `app_icon.png` only feeds `build.sh`'s packaging metadata and
 `splash_screen.png` is only ever consumed at build time (baked into the
 loader binary as a C header by `gen_splash_header.py`). The two
-`no-logo-*.png` placeholders are the first `resources/` assets the app
+no-item placeholders (originally `no-logo-*.png`) are the first `resources/` assets the app
 actually loads while running, so `get_resources_dir()` follows the exact
 same source-vs-packaged split as `get_qml_dir()`/`get_scripts_dir()`
 (`<repo root>/resources` from source, `<root>/resources` once packaged —
 see build-side bundling in [16]).
 
-`app.py` resolves both `no-logo-light.png`/`no-logo-dark.png` to absolute
-paths once at startup and feeds them into QML as `noLogoLightPath`/
-`noLogoDarkPath` context properties — the same mechanism already used for
+`app.py` resolves both `no-item-dark.png`/`no-item-light.png` to
+absolute paths once at startup and feeds them into QML as
+`noItemDarkThemePath`/`noItemLightThemePath` context properties — the same mechanism already used for
 `initialX`/`initialWidth`/etc., and necessary here because `Theme.qml` (a
 pure QML singleton) has no other way to reach a Python-resolved
-filesystem path. `Theme.noLogoSource` then picks between them: light
-image in dark theme, dark image in light theme — the *opposite* of
-`Theme.isDark`, so the placeholder always reads as a contrasting shape
-against the current theme's background rather than nearly disappearing
-into it.
+filesystem path. `Theme.noItemSource` then picks between them by
+theme. The files are named for the theme they're shown *in*, not for
+their own colors: `no-item-dark.png` (shown in the dark theme) is drawn
+in a lighter tone and `no-item-light.png` in a darker one, so each still
+contrasts — faintly, by design — with its theme's background.
 
 Every place a client's logo is displayed (`ClientRow.qml`'s row logo,
 `AddClientDialog.qml`/`EditClientDialog.qml`'s logo-picker preview,
 `EditClientDialog.qml`'s header preview) binds `source` as
-`root.logoPath || Theme.noLogoSource` — relying on an empty string being
+`root.logoPath || Theme.noItemSource` — relying on an empty string being
 falsy in QML/JS, not an explicit `=== ""` check. This also *replaces*
 `AddClientDialog`/`EditClientDialog`'s previous "No logo selected…"
 italic-text placeholder entirely: with a real placeholder graphic
 available, showing plain text instead would just be inconsistent with
 every other empty-logo spot in the app.
 
-### [126] No-app placeholder: same mechanism as [125], applied to app icons
+### [126] No-item placeholder applied to app icons too
 
-Identical pattern, one step later: `app.py` resolves `no-app-light.png`/
-`no-app-dark.png` the same way and feeds them in as `noAppLightPath`/
-`noAppDarkPath`; `Theme.noAppSource` picks the theme-contrasting one the
-same way `Theme.noLogoSource` does.
+App icons use the very same `Theme.noItemSource` as client logos in [125]
+— one shared placeholder pair, not a separate per-kind one. (Until
+0.17.0 there were two pairs, `no-logo-*.png` and
+`no-app-*.png`, each with its own `Theme` property; they were merged at
+the user's request so every "nothing set" spot in the app shows the same
+graphic.)
 
 Two display sites read an app's icon: `ClientRow.qml`'s per-app
 `SquareIconButton` delegate (`iconSource: modelData.icon ? ... :
-Theme.noAppSource`) and `AddAppDialog.qml`'s discovered-apps list
+Theme.noItemSource`) and `AddAppDialog.qml`'s discovered-apps list
 delegate. Both previously fell back to something else when `modelData.icon`
 was empty — `ClientRow.qml`'s button showed the app name's first letter as
 a text glyph (`SquareIconButton`'s own built-in fallback, since its
@@ -326,13 +328,14 @@ actually stored for it.
 
 ### [19] MOCK_MODE
 
-The app is currently in UI/UX-prototyping phase, so these three scripts
-don't perform their real privileged action (`useradd`/`userdel`/`su`+
-`xhost`) — they still require root, so the real pkexec authentication
-dialog can be exercised end-to-end, but the actual mutating command is
-replaced with a printed line saying what would have run. Flip `MOCK_MODE`
-to `False` in each script once prototyping is done and the real action
-should happen.
+By default these three scripts don't perform their real privileged
+action (`useradd`/`userdel`/`su`+`xhost`) — they still require root, so
+the real pkexec authentication dialog can be exercised end-to-end, but
+the actual mutating command is replaced with a printed line saying what
+would have run. `MOCK_MODE = True` is that default; passing `--real`
+overrides it for one call. The app passes `--real` only in real mode
+(`run-real.sh`, see [138]); running a script by hand without `--real`
+stays mocked.
 
 ## tools/check_versions.py
 
@@ -571,7 +574,207 @@ Reserve room for the icon+hint at the left, in every state, so typed
 text lines up in the same place whether the hint is showing or not
 (rather than text jumping left the instant it disappears).
 
+## src/clientdeck/qml/ThemedExpander.qml
+
+### [128] Expander design: instant toggle, indented body, dialog grows
+
+A plain `ColumnLayout` (header row + body), not a Controls component:
+there's no themed collapsible in Controls Basic, and the header is just
+two `Text`s plus a hairline divider, matching the dialogs' existing
+flat/glass look (`Theme.textSecondary` at rest, `Theme.textPrimary` on
+hover, `Theme.surfaceGlass` for the line — the same color as the dialog
+border). The body is indented by the chevron's width + gap, so its
+contents line up with the title text rather than the chevron;
+`contentIndent` overrides that, e.g. `EditClientDialog.qml` sets it to
+its label-column width + spacing so the checkboxes line up with its
+field column instead.
+
+Expand/collapse is an instant `visible` toggle, not an animated height —
+consistent with this project's preference for instant snaps over
+animated micro-interactions. Every dialog using it sizes its `Window`
+from `contentColumn.implicitHeight`, so the dialog simply grows/shrinks
+with the section; no extra wiring needed.
+
+## src/clientdeck/ps1.py
+
+### [130] PS1 preview: rendered in Python, not by running bash
+
+The preview never invokes a real shell: running `bash -i` (let alone as
+the client's user) just to draw a prompt would be slow, environment-
+dependent and, for another user, need privilege. Instead `ps1.py`
+reproduces the two stages a real terminal session goes through:
+
+1. `expand_prompt()` — bash's own prompt decoding: backslash escapes
+   (`\u`, `\h`, `\w`, `\$`, `\t`, octal `\033`, `\e`, …) with sample
+   values from `PromptContext`, `\[`/`\]` dropped (they only tell
+   readline which bytes are zero-width), then parameter expansion ([131]).
+2. `terminal_runs()` — what the terminal does with that byte stream:
+   SGR (`ESC[…m`) colors/attributes — 16-color, 256-color and truecolor,
+   bold/italic/underline/reverse — while other control sequences are
+   consumed invisibly ([132]).
+
+The runs become Qt rich-text HTML (`render_ps1_html`), with spaces as
+`&nbsp;` since Qt's rich text collapses whitespace. Colors use GNOME
+Terminal's default palette, and the two simulated terminals have fixed
+dark/light backgrounds independent of the app theme, so the user sees how
+the prompt looks in either kind of terminal. `Ps1Preview.qml` gets these
+colors from `ps1Renderer.terminalColors()` rather than duplicating them.
+Bold is rendered as bold weight in the same color (modern GNOME Terminal
+default), not as the "bright" variant. Sample values: the real machine
+hostname, the dialog's current username, `~/work` as working directory.
+
+### [131] Parameter expansion is a small, deliberate subset
+
+Bash expands `$var`/`${…}` in PS1 after decoding escapes (with
+`promptvars` on, the default). Only the forms that appear in real-world
+prompts are handled — `$name`, `${name}`, `${name:+word}`,
+`${name:-word}` and their non-colon variants — with every variable
+treated as unset unless `PromptContext.variables` provides it; this is
+what makes Debian's `${debian_chroot:+($debian_chroot)}` correctly
+disappear. Command substitution (`$(…)`, backticks) is not executed and
+shows up literally in the preview. `\$` is protected with a placeholder
+during expansion so it stays a literal `$`.
+
+### [132] Non-SGR escape sequences are invisible in the preview
+
+OSC sequences (`ESC ] … BEL`) — like the `\e]0;\u@\h: \w\a` window-title
+setter in both presets — change terminal state, not the visible line, so
+they are consumed and produce no text. Other CSI sequences (cursor
+movement etc.) and stray BEL/CR are dropped the same way; the preview
+only models what ends up drawn on a single prompt line (plus `\n`
+line breaks). The preview text also wraps (`WrapAnywhere`) when wider
+than its box, as a real terminal would, rather than clipping.
+
+### [134] Preview drawn as miniature terminal windows
+
+A bare colored strip read as "two rows glued together", not as a
+terminal, so each preview is a small window: a title bar (GNOME-style:
+centered bold title, three dimmed decorative buttons on the right),
+rounded corners and a border in the terminal's own chrome colors
+(`TerminalColors`, approximating GNOME Terminal's dark/light Adwaita
+look), and the two windows clearly spaced apart.
+
+The title is the one the PS1 itself sets via OSC 0/2 (`\e]0;…\a` in both
+presets → `user@host: ~/work`), falling back to "Terminal" when the
+prompt sets none — so the title-setter part of a PS1 is visible in the
+preview instead of silently disappearing ([132]).
+
+`Ps1ConfigDialog` shows a short session — the prompt with a sample `ls`
+command, its output (directories in `ls`'s default bold blue), then the
+live prompt with a block cursor — so the prompt is seen in context,
+including how it butts up against typed text (e.g. a PS1 without a
+trailing space). The preview only appears in `Ps1ConfigDialog`; the
+client dialogs just name the selected prompt ([135]).
+
+## src/clientdeck/qml/ColonHintTextField.qml
+
+### [136] Colon hints: how the completion list opens, narrows and closes
+
+Replaced the PS1 dialog's "Insert" combo box (user request): special
+codes are typed as `:keyword` instead, so they're discoverable without
+leaving the keyboard. Generic component — a `ValidatedTextField` with a
+`hints` list of `{keyword, value, description}`; the PS1 hints live in
+`ps1.HINTS` (keywords unique, lowercase alphanumeric — tested).
+
+- **Opening**: only a ":" the user actually *types* opens it — detected
+  in `Keys.onPressed` (`event.text === ":"`) and consumed by the
+  `textEdited` it produces. Comparing text lengths in `onTextEdited`
+  doesn't work reliably, since `textChanged` (also fired by programmatic
+  changes like applying a preset) can run first. Deleting text back to
+  an existing ":" therefore doesn't reopen the list, and neither does
+  setting the text programmatically.
+- **Narrowing**: the query is the text between the ":" (`hintAnchor`)
+  and the cursor, matched as a keyword prefix (case-insensitive). The
+  list closes — and completion stops — when nothing matches, when the
+  query stops being alphanumeric (a space, `\`, `[`, …), when the cursor
+  moves to or before the ":", or when the ":" itself is deleted. This is
+  what makes a literal ":" (like the one between `\h` and `\w` in the
+  default PS1) cost nothing: the list just closes as you keep typing.
+- **Choosing**: click a row, or Enter/Tab on the highlighted one (Up/Down
+  wrap around); `:query` is replaced by the hint's value and the cursor
+  goes after it.
+- **Escape**: closes the list and leaves the typed text exactly as is.
+  The field claims Escape in `Keys.onShortcutOverride` while the list is
+  open, otherwise the key event never reaches it — the dialog's own
+  Escape `Shortcut` would take it first.
+- The `Popup` never takes focus (`focus: false`, `NoAutoClose`), so the
+  field keeps receiving keystrokes; it's positioned under the ":" and
+  clamped to the field width, showing at most 6 rows.
+
+## Dialog Escape shortcuts (all dialogs) / app.py `_FocusTracker`
+
+### [137] Escape must only close the focused dialog
+
+Every dialog closes on Escape via a window-level `Shortcut`. With a
+dialog open on top of another dialog (`ConfirmDialog` over Add/Edit
+client, `Ps1ConfigDialog` over a client dialog), Qt considers *all* their
+Escape shortcuts in context — `Qt.WindowShortcut` matches the focus
+window's transient-parent chain too — so the key is reported as an
+ambiguous shortcut (`activatedAmbiguously`) and **none** fires: Escape
+did nothing at all in any nested dialog. This predates the PS1 work; it
+surfaced when testing the colon hints (confirmed headlessly via
+`activatedAmbiguously`). `Window.active` doesn't help either, as it is
+also true for the focus window's transient parents.
+
+Fix: app.py's `_FocusTracker` exposes `QGuiApplication.focusWindow()` as
+`focusTracker.focusWindow`, and each dialog's Escape shortcut is
+`enabled: focusTracker.focusWindow === root` — exactly one is live.
+Dialogs stacked on another (`ConfirmDialog`, `Ps1ConfigDialog`) also call
+`anchorWindow.requestActivate()` on close, so focus — and thus Escape —
+returns to the dialog underneath rather than relying on the window
+manager to do it (on Wayland the compositor may still decide; the
+request is harmless either way).
+
+## src/clientdeck/qml/PromptSetting.qml
+
+### [135] Checkbox + "Selected: <name>" instead of an inline preview
+
+The client dialogs' Advanced section originally embedded the two-terminal
+preview next to "Configure"; the user replaced that with a plain
+"Set bash prompt (PS1)" checkbox, the "Configure" button on the same row,
+and a "Selected: <name>" caption under the checkbox label (indented by
+the checkbox indicator width + spacing so it lines up with the label
+text). The preview now lives only in `Ps1ConfigDialog`.
+
+The checkbox defaults to unchecked (drawn empty in the user's mockup),
+i.e. "leave the account's prompt alone"; "Configure" is disabled and the
+caption dimmed until it's checked. `<name>` is the preset whose PS1
+matches exactly, else "Custom" — same matching rule as the configure
+dialog's preset combo ([133]). `reset()` restores unchecked + default
+PS1; both dialogs call it on every open (still UI-only, [129]).
+
+## src/clientdeck/qml/Ps1ConfigDialog.qml
+
+### [133] When switching presets asks for confirmation
+
+"Has changes" means the PS1 text no longer equals the preset it's based
+on (`basePresetIndex`); a PS1 that matches no preset at all (opened as
+custom) always counts as changed, since switching would lose it just the
+same. In that case picking a preset is deferred: the combo snaps back to
+the current preset and a `ConfirmDialog` (Yes/No) asks first — "Yes"
+applies it, "No" leaves text and combo untouched. Re-picking the same,
+unmodified preset is a no-op. The combo shows "(modified)" after the
+preset name once the text diverges, or "Custom" if it matches none.
+"Reset" deliberately does not ask: it is an explicit request for the
+default PS1 (preset index 0 in `ps1.PRESETS`).
+
 ## src/clientdeck/qml/AddClientDialog.qml
+
+### [129] "Advanced" options are UI-only for now
+
+The "Advanced" section — Support DBus, Support Wayland/X, Single SSH
+Agent (0.17.0) and the "Set bash prompt (PS1)" setting
+(0.17.0) — exists in both `AddClientDialog.qml` and
+(since 0.17.0) `EditClientDialog.qml`. It was added as
+layout first; the user said what each option does at account-creation
+time will be specified later. So on every open the three account
+checkboxes are reset to checked and the PS1 setting to unchecked with the
+default PS1, and none of these values are yet
+passed to `createLinuxUser()`/`create_user.py` or stored in the client's
+config. Wire them in once that behavior is specified. Because nothing is
+stored yet, the edit dialog can't show a client's actual settings; once
+they're persisted, pre-fill them from the client's config in `openFor()`
+like the other fields.
 
 ### [40] Why this is a real top-level `Window`, with `flags` matching Main.qml exactly
 
@@ -800,37 +1003,116 @@ background/icon/text colors, which don't adapt to `Theme.isDark` at all
 light theme" (the default text color read fine in dark mode but was
 effectively invisible against a light `Theme.surface` background). Same
 "fully own the rendering" approach as SquareIconButton/ValidatedTextField.
-The manual-entry `CheckBox` below has the same problem and fix.
+Checkboxes have the same problem and fix; that styling now lives in the
+shared `ThemedCheckBox.qml` (extracted in 0.17.0 from this
+dialog's manual-entry checkbox), used everywhere a checkbox appears.
 
-### [51] Why a missing/unresolvable app icon just shows nothing
+### [51] What a missing/unresolvable app icon shows
 
 Discovered `.desktop` apps' `Icon=` value is either an absolute path to
 an image file, or an icon-theme name to resolve via the platform's icon
-theme — "if exists" per the request: an empty/unresolvable one just
-shows no icon rather than a broken-image placeholder.
+theme. Originally an empty/unresolvable one showed nothing; it now shows
+the themed no-item placeholder ([126]) — empty in both the list and the
+form preview, and unresolvable ones too (image `Error`, or a provider
+result with no size), so the list and the preview behave the same.
 
-### [52] Why the pick-existing view has its own Cancel button
+### [52] What the pick-existing view's Cancel does
 
-The pick-existing view previously had no way to back out of the dialog
-at all besides Escape/clicking outside — the manual-entry view already
-has its own Cancel below.
+Since 0.17.0 it returns to the custom-command form without
+picking anything (user spec), rather than closing the dialog — the form
+keeps whatever was typed. Escape in the picker does the same; Escape in
+the form closes the dialog.
 
-### [53] Why manual apps get a free-text icon field
+### [53] Retired — free-text icon field
 
-Only way to get an icon on a manually-added app (e.g. Docker, which
-typically has no launchable .desktop entry to discover an icon from) —
-an absolute image path or an icon-theme name, same as a discovered app's
-`Icon=` value.
+Removed in 0.17.0: the icon is now set by "Browse…" (an
+image file) or by picking an existing app (its path or theme name), with
+a live preview — see [139].
+
+### [140] Editing/removing an app reuses the add dialog
+
+User request: like "edit client", base the app editor on the "Add
+application" dialog, opened by right-clicking the app's button, and let
+it remove the app — confirmed by the user. Unlike EditClientDialog (a
+separate file that duplicated AddClientDialog's fields), this is a mode
+of the same `AddAppDialog`: `editIndex >= 0` switches title,
+Add → Apply, and shows Remove, so the form/picker/Clear behavior ([139])
+can't drift between the two. `open()` is add mode; `openForEdit()`
+resets via the same `resetAndShow()` and then pre-fills. (Not named
+`show()` — that would shadow `QWindow::show`.)
+
+- `SquareIconButton` accepts both buttons in its single `MouseArea`
+  (which must keep the drag grab, [87]) and tracks `rightPress`: a right
+  press never starts a drag ([75]-style reordering stays left-only),
+  doesn't flash the pressed/accent color, and emits `rightClicked()` on
+  release inside the button — the same release-to-activate rule as
+  `clicked()`.
+- `ClientListModel`'s `apps` role now also carries `workingDir`, so the
+  form can be pre-filled; Apply goes through the new
+  `updateApp()`/`ConfigStore.update_app()`, which replaces the entry in
+  place (row position kept).
+- Remove opens a `ConfirmDialog` anchored to this dialog ([48]) naming
+  the app as it was when the dialog opened (`editAppName`, not the
+  possibly-edited Name field). Cancel returns to the edit dialog; Remove
+  calls the existing `removeAppFromClient()` and closes both.
+- `ThemedButton.danger` (danger-colored text, `dangerSurface` hover,
+  `danger` fill while pressed with normal text so it stays readable) is
+  new for this button.
+
+### [141] Working directory "Browse…" uses `FolderDialog`
+
+User request: a "Browse…" right after a shortened working-directory field,
+using an "open directory" dialog rather than an "open file" one — so
+Qt Quick's `FolderDialog` (directories only), not `FileDialog`. It starts
+in the folder already typed, if the field holds an absolute path (Qt
+silently falls back to its own default for one that doesn't exist).
+
+Both this and the icon's "Browse…" convert the chosen URL with
+`urlToPath()`, which also percent-decodes it: the icon picker used to
+just strip `file://`, so a path with spaces was stored as `…My%20Icons…`
+and never loaded.
+
+### [139] Form-first "Add application", picking fills the form
+
+User spec: the discovered-apps list is handy, but picking one must leave
+room for command-line parameters, so the custom-command form is the
+default view and picking only *pre-fills* it.
+
+- A pick overwrites name, launch command and icon (confirmed: silently,
+  no prompt), sets "Run as su" on, and leaves the working directory
+  alone. The `.desktop` file's own `Path=` is therefore not used any
+  more; field codes (`%U` etc.) are already stripped from `Exec=` at
+  discovery.
+- "Clear" undoes the selection: empties those three fields and restores
+  "Run as su" to `useSuBeforePick`, captured only on the *first* pick of
+  a series, so picking A then B then Clear returns to the state before A.
+  It doesn't try to restore text typed before the pick — the user chose
+  "clear only the selected application".
+- `iconValue` holds an absolute path or a theme name; `iconUrl()` maps it
+  to `file://…` or `image://theme/…`. The preview row reuses
+  AddClientDialog's logo-row layout ([42]): square preview, spacer,
+  "Browse…".
+- Window height: fixed 480 in the picker, `max(480, implicit height)` in
+  the form — the form grows when the "Based on" row appears instead of
+  squeezing the buttons into the bottom edge. The picker must stay fixed:
+  its `ScrollView`'s implicit height is the whole list's content height,
+  so with a real system's few hundred `.desktop` apps a content-sized
+  window became ~13,700px tall and ended up spanning onto another
+  monitor (fixed before release, in 0.17.0).
 
 ## src/clientdeck/qml/ClientRow.qml
 
-### [54] Why double-click uses `TapHandler`, not `MouseArea`
+### [54] Why the logo's right-click uses `TapHandler`, not `MouseArea`
 
-Double-clicking the logo opens the "modify client" dialog — see
+Right-clicking the logo opens the "modify client" dialog — see
 CLAUDE.md's "Modifying a client" section. `TapHandler` (not a
 `MouseArea`) since the logo needs no other pointer behavior and a
 passive handler coexists cleanly with the `HoverHandler` above, same
 reasoning as SquareIconButton's own tooltip HoverHandler.
+`acceptedButtons: Qt.RightButton` + `onTapped` (a single right-click),
+replacing the original left-button `onDoubleTapped` in
+0.17.0 so that "edit this thing" is the same gesture
+everywhere — right-click — for client logos and, next, app buttons.
 
 ### [55] Why `appsContainer` is a plain `Item` + `Repeater`, not a `Row`
 
@@ -1395,7 +1677,7 @@ fall back to running with no splash at all" failure mode.
 Per the blueprint's "App-side responsibilities" #1: "only [self-]launch
 ... AND no channel is already set up (avoid double-launching if a dev
 wrapper script already started one for a source checkout)". A wrapper
-script (e.g. `run.sh`) that starts its own `clientdeck-loader` and sets
+script (e.g. `run-mocked.sh`/`run-real.sh`) that starts its own `clientdeck-loader` and sets
 `CLIENTDECK_LOADER_SOCKET` before invoking the app is exactly that case
 — the app must still *connect* and speak the protocol (or the wrapper's
 splash would never receive `running` and would just sit until its own
@@ -1406,7 +1688,28 @@ build launched by something unusual — the packaged-build self-launch
 path only exists for the plain "just run the binary" case, with no
 wrapper involved at all.
 
-## src/clientdeck/app.py (loader wiring)
+## src/clientdeck/run_mode.py
+
+### [138] Mock vs. real mode is chosen per app run, passed as `--real`
+
+User request: a `run-real.sh` that really executes the privileged
+actions, next to the mocked behavior (now `run-mocked.sh`). The scripts
+used to be mock-only via a hardcoded `MOCK_MODE = True`.
+
+The packaged binary built by `build.sh` is always real — per the user,
+the build produces only the real version; `is_packaged_build()` decides
+it at runtime, so no build-time flag or second artifact is needed, and
+`CLIENTDECK_MODE` cannot switch a shipped binary into mock mode. From a
+source checkout the mode comes from `CLIENTDECK_MODE` (`real` → real;
+anything else or unset → mock, so a plain `uv run python -m clientdeck`
+or `run-clientdesk.sh` stays safe by default). It
+reaches the scripts as an explicit `--real` argv flag, not an inherited
+environment variable, because `pkexec` deliberately clears the
+environment of the program it runs — an env var set on the app would
+never reach `create_user.py`/`delete_user.py`. The flag keeps each
+script's own contract explicit too: no `--real`, no change to the
+system. The app prints which mode it is in to stderr on startup.
+
 
 ### [113] Why `maybe_launch_loader()` is called before `QGuiApplication` is even constructed
 
@@ -1427,12 +1730,12 @@ first (per the blueprint's Qt-specific timing note) gives the event loop
 a chance to actually paint before the loader is told it's safe to fade
 out.
 
-## run.sh
+## run-mocked.sh, run-real.sh
 
 ### [116] Why this wrapper builds+launches the loader itself, and why not `exec`
 
 The app only *self*-launches a loader when packaged (see [112]/[115]) —
-a source checkout run via `run.sh` would otherwise never show a splash
+a source checkout run via these scripts would otherwise never show a splash
 at all. This wrapper fills that gap the same way the blueprint frames
 dev-mode splash support: an external script starts the loader and sets
 `CLIENTDECK_LOADER_SOCKET` before starting the app, and
@@ -1440,8 +1743,7 @@ dev-mode splash support: an external script starts the loader and sets
 means the app just connects to it rather than launching its own.
 
 The final `uv run python -m clientdeck "$@"` is deliberately *not*
-`exec`'d (unlike this file's own previous, splash-less version, now
-`run-clientdesk.sh`): `exec` replaces the shell process image outright,
+`exec`'d (unlike the original, splash-less `run-clientdesk.sh`): `exec` replaces the shell process image outright,
 which would skip the `trap cleanup EXIT` below entirely — bash never
 runs EXIT traps across an `exec`, since the shell doesn't exit in the
 normal sense, it *becomes* the new program. Running the app as a plain
@@ -1456,13 +1758,19 @@ pre-built) is cheap: `make` no-ops once the binary is already up to
 date, so this only costs real time the first run or after `main.c`
 changes.
 
+The two scripts are identical apart from `CLIENTDECK_MODE` (mock/real,
+see [138]) and `run-real.sh`'s warning line. They were one `run.sh`
+until 0.17.0; duplicated rather than one sourcing the
+other so each reads standalone and can't be flipped to the other mode by
+an inherited environment variable.
+
 ## run-loader.sh
 
-### [120] Why this script behaves differently from `run.sh` in two ways
+### [120] Why this script behaves differently from `run-mocked.sh`/`run-real.sh` in two ways
 
 Exists solely for manually previewing/tuning the splash by itself (per
 the blueprint's own verification checklist: "run standalone with no
-channel/env var set"), so it deliberately diverges from `run.sh` (see
+channel/env var set"), so it deliberately diverges from those (see
 [116]) in two ways:
 
 - **`exec`, not a foreground command + cleanup trap**: there's nothing
@@ -1470,8 +1778,8 @@ channel/env var set"), so it deliberately diverges from `run.sh` (see
   directory (this script never sets `CLIENTDECK_LOADER_SOCKET` at all,
   which is exactly what puts the loader into standalone mode — see
   [106]) — so `exec`'ing straight into the loader binary is safe and
-  simpler, unlike `run.sh`'s reasons for avoiding it.
-- **A loader build failure is not swallowed**: `run.sh` treats a failed
+  simpler, unlike their reasons for avoiding it.
+- **A loader build failure is not swallowed**: they treat a failed
   `make -C src/loader` as "fine, just run with no splash" (see [112]),
   because there the app is the point and the splash is optional. Here
   the loader *is* the point of running the script at all, so `set -e`

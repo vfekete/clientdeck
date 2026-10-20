@@ -9,7 +9,9 @@ keep it orphaned on disk. Intended to be invoked with root privileges via
 pkexec, it's the target of it.
 
 argv contract:
-    delete_user.py USERNAME
+    delete_user.py [--real] USERNAME
+
+    --real  actually run `userdel`, overriding MOCK_MODE for this call.
 
 Exit codes:
     0   user deleted
@@ -38,12 +40,15 @@ def build_userdel_command(username: str) -> list[str]:
     return ["userdel", "--remove", username]
 
 
-def run(username: str) -> int:
+def run(username: str, mock: bool | None = None) -> int:
+    """`mock=None` means MOCK_MODE."""
+    if mock is None:
+        mock = MOCK_MODE
     if os.geteuid() != 0:
         print("delete_user.py must be run as root (e.g. via pkexec).", file=sys.stderr)
         return EXIT_NOT_ROOT
     command = build_userdel_command(username)
-    if MOCK_MODE:
+    if mock:
         print(f"[MOCK] delete_user.py: would run: {' '.join(command)}")
         return 0
     result = subprocess.run(command)
@@ -54,13 +59,14 @@ def run(username: str) -> int:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Delete a Linux user/home dir for a renamed ClientDeck client.")
+    parser.add_argument("--real", action="store_true", help="Really run the command (default: mock)")
     parser.add_argument("username")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
-    return run(args.username)
+    return run(args.username, mock=False if args.real else None)
 
 
 if __name__ == "__main__":

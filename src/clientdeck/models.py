@@ -53,7 +53,13 @@ class ClientListModel(QAbstractListModel):
             return client.logo_path
         if role == self.AppsRole:
             return [
-                {"name": a.name, "command": a.command, "icon": a.icon, "useSu": a.use_su}
+                {
+                    "name": a.name,
+                    "command": a.command,
+                    "icon": a.icon,
+                    "useSu": a.use_su,
+                    "workingDir": a.working_dir,
+                }
                 for a in client.apps
             ]
         return None
@@ -105,6 +111,21 @@ class ClientListModel(QAbstractListModel):
             return
         self._store.add_app(
             username,
+            AppEntry(name=app_name, command=command, working_dir=working_dir or None, use_su=use_su, icon=icon or None),
+        )
+        index = self.index(row, 0)
+        self.dataChanged.emit(index, index, [self.AppsRole])
+
+    @Slot(str, int, str, str, bool, str, str)
+    def updateApp(
+        self, username: str, app_index: int, app_name: str, command: str, use_su: bool, working_dir: str, icon: str
+    ) -> None:
+        row = next((i for i, c in enumerate(self._store.clients) if c.username == username), None)
+        if row is None:
+            return
+        self._store.update_app(
+            username,
+            app_index,
             AppEntry(name=app_name, command=command, working_dir=working_dir or None, use_su=use_su, icon=icon or None),
         )
         index = self.index(row, 0)

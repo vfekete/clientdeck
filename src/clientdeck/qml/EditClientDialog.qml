@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtQuick.Window
 
-// Themed "modify client" dialog, opened by double-clicking a client's logo
+// Themed "modify client" dialog, opened by right-clicking a client's logo
 // (see ClientRow.qml). Same fields as AddClientDialog, pre-filled with the
 // client's current values, plus the rename-aware flow described in
 // CLAUDE.md's "Modifying a client" section: changing the username creates
@@ -28,7 +28,7 @@ Window {
     modality: Qt.WindowModal
     color: "transparent"
     visible: false
-    width: 420 * Theme.uiScale
+    width: 480 * Theme.uiScale
     height: contentColumn.implicitHeight + dialogPadding * 2
 
     // x/y set once, imperatively, not as a live binding — see [41].
@@ -53,6 +53,11 @@ Window {
         usernameField.text = username
         usernameField.touched = false
         root.logoPath = logoPath || ""
+        advancedSection.expanded = false
+        supportDbusCheck.checked = true
+        supportDisplayCheck.checked = true
+        singleSshAgentCheck.checked = true
+        promptSetting.reset()
         root.modificationFailed = false
         root.open()
     }
@@ -62,8 +67,11 @@ Window {
         root.close()
     }
 
+    // Only while this window is focused — nested dialogs' Escape shortcuts
+    // would otherwise all match at once and cancel out; see [137].
     Shortcut {
         sequence: "Escape"
+        enabled: focusTracker.focusWindow === root
         onActivated: root.close()
     }
 
@@ -89,7 +97,7 @@ Window {
                     Layout.preferredWidth: Theme.hugeIconButtonSize
                     Layout.preferredHeight: Theme.hugeIconButtonSize
                     // Themed placeholder when unset — see [125].
-                    source: root.logoPath || Theme.noLogoSource
+                    source: root.logoPath || Theme.noItemSource
                     fillMode: Image.PreserveAspectFit
                 }
                 Text {
@@ -117,10 +125,10 @@ Window {
                     Layout.preferredWidth: root.fieldLabelWidth
                 }
                 // Fills the row height; width follows the image's own
-                // aspect ratio. Falls back to the themed no-logo
+                // aspect ratio. Falls back to the themed no-item
                 // placeholder when unset — see [125].
                 Image {
-                    source: root.logoPath || Theme.noLogoSource
+                    source: root.logoPath || Theme.noItemSource
                     fillMode: Image.PreserveAspectFit
                     Layout.preferredHeight: Theme.smallIconButtonSize * 2
                     Layout.preferredWidth: implicitHeight > 0
@@ -186,6 +194,37 @@ Window {
                     // The client's own current username must not self-flag as taken.
                     validator: (t) => t.trim().length > 0
                         && (t === root.originalUsername || !usernameChecker.isTaken(t))
+                }
+            }
+
+            // Same options as AddClientDialog's, body aligned with the
+            // field column — not yet acted on or stored, see [129].
+            ThemedExpander {
+                id: advancedSection
+                Layout.fillWidth: true
+                title: "Advanced"
+                contentIndent: root.fieldLabelWidth + Theme.spacing
+
+                ThemedCheckBox {
+                    id: supportDbusCheck
+                    text: "Support DBus"
+                    checked: true
+                }
+                ThemedCheckBox {
+                    id: supportDisplayCheck
+                    text: "Support Wayland/X"
+                    checked: true
+                }
+                ThemedCheckBox {
+                    id: singleSshAgentCheck
+                    text: "Single SSH Agent"
+                    checked: true
+                }
+                PromptSetting {
+                    id: promptSetting
+                    Layout.fillWidth: true
+                    username: usernameField.text
+                    anchorWindow: root
                 }
             }
 

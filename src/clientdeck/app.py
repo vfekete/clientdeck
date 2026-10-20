@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import shlex
 import signal
+import socket
 import subprocess
 import sys
 
-from PySide6.QtCore import QObject, QTimer, QUrl, Slot
+from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
@@ -22,7 +23,18 @@ from .desktop_apps import discover_desktop_apps
 from .icon_provider import ThemeIconProvider, ensure_icon_theme_configured
 from .loader_ipc import maybe_launch_loader
 from .models import ClientListModel
+from .ps1 import (
+    DARK_TERMINAL,
+    DEFAULT_PS1,
+    HINTS,
+    LIGHT_TERMINAL,
+    PRESETS,
+    PromptContext,
+    render_session_html,
+    render_title,
+)
 from .paths import get_qml_dir, get_resources_dir, get_scripts_dir, is_packaged_build
+from .run_mode import is_real_mode, script_mode_args
 from .username import username_or_group_exists
 from .window_placement import MonitorInfo, resolve_startup_geometry
 
@@ -36,25 +48,88 @@ class _ClientProvisioner(QObject):
     docs/comments-details.md [3].
     """
 
+    def __init__(self, real: bool, parent: QObject | None = None):
+        super().__init__(parent)
+        self._mode_args = script_mode_args(real)
+
     @Slot(str, result=bool)
     def createLinuxUser(self, username: str) -> bool:
         # Invoked by its own shebang, not sys.executable — see [4].
-        result = subprocess.run(["pkexec", str(get_scripts_dir() / "create_user.py"), username])
-        return result.returncode == 0
+        argv = ["pkexec", str(get_scripts_dir() / "create_user.py"), *self._mode_args, username]
+        return subprocess.run(argv).returncode == 0
 
     @Slot(str, result=bool)
     def deleteLinuxUser(self, username: str) -> bool:
         # Removes the old account when a client is renamed and the user
-        # opts to delete rather than orphan it. See [3] for the MOCK_MODE
-        # caveat.
-        result = subprocess.run(["pkexec", str(get_scripts_dir() / "delete_user.py"), username])
-        return result.returncode == 0
+        # opts to delete rather than orphan it. Mocked unless real mode — see [138].
+        argv = ["pkexec", str(get_scripts_dir() / "delete_user.py"), *self._mode_args, username]
+        return subprocess.run(argv).returncode == 0
 
 
 class _UsernameChecker(QObject):
     @Slot(str, result=bool)
     def isTaken(self, name: str) -> bool:
         return username_or_group_exists(name)
+
+
+class _FocusTracker(QObject):
+    """Exposes the application's focus window to QML — see [137]."""
+
+    focusWindowChanged = Signal()
+
+    def __init__(self, app: QGuiApplication, parent: QObject | None = None):
+        super().__init__(parent)
+        self._app = app
+        app.focusWindowChanged.connect(lambda _window: self.focusWindowChanged.emit())
+
+    @Property(QObject, notify=focusWindowChanged)
+    def focusWindow(self) -> QObject | None:
+        return self._app.focusWindow()
+
+
+class _Ps1Renderer(QObject):
+    """PS1 preview HTML, presets and colon hints for QML — see [130]."""
+
+    def __init__(self, parent: QObject | None = None):
+        super().__init__(parent)
+        full = socket.gethostname() or "hostname"
+        self._hostname, self._full_hostname = full.split(".", 1)[0], full
+
+    def _context(self, username: str) -> PromptContext:
+        return PromptContext(
+            username=username or "user", hostname=self._hostname, full_hostname=self._full_hostname
+        )
+
+    @Slot(str, str, bool, result=str)
+    def renderSession(self, ps1: str, username: str, dark: bool) -> str:
+        return render_session_html(ps1, self._context(username), dark)
+
+    @Slot(str, str, result=str)
+    def title(self, ps1: str, username: str) -> str:
+        return render_title(ps1, self._context(username))
+
+    @Slot(bool, result="QVariantMap")
+    def terminalColors(self, dark: bool) -> dict:
+        c = DARK_TERMINAL if dark else LIGHT_TERMINAL
+        return {
+            "background": c.background,
+            "foreground": c.foreground,
+            "titleBar": c.title_bar,
+            "titleText": c.title_text,
+            "border": c.border,
+        }
+
+    @Slot(result=str)
+    def defaultPs1(self) -> str:
+        return DEFAULT_PS1
+
+    @Slot(result=list)
+    def presets(self) -> list:
+        return [{"name": name, "ps1": ps1} for name, ps1 in PRESETS]
+
+    @Slot(result=list)
+    def hints(self) -> list:
+        return [{"keyword": k, "value": v, "description": d} for k, v, d in HINTS]
 
 
 class _DesktopAppsProvider(QObject):
@@ -72,9 +147,10 @@ class _AppLauncher(QObject):
     See docs/comments-details.md [5].
     """
 
-    def __init__(self, store: ConfigStore, parent: QObject | None = None):
+    def __init__(self, store: ConfigStore, real: bool, parent: QObject | None = None):
         super().__init__(parent)
         self._store = store
+        self._real = real
 
     @Slot(str, int)
     def launchApp(self, username: str, app_index: int) -> None:
@@ -85,12 +161,12 @@ class _AppLauncher(QObject):
         command = shlex.split(app.command)
         if not command:
             return
-        _spawn_launch_script(username, command, workdir=app.working_dir, gui=True)
+        _spawn_launch_script(username, command, workdir=app.working_dir, gui=True, real=self._real)
 
 
-def _spawn_launch_script(username: str, command: list[str], workdir: str | None, gui: bool) -> None:
+def _spawn_launch_script(username: str, command: list[str], workdir: str | None, gui: bool, real: bool) -> None:
     # Invoked by its own shebang — see [4].
-    argv = [str(get_scripts_dir() / "launch_as_user.py"), "--username", username]
+    argv = [str(get_scripts_dir() / "launch_as_user.py"), *script_mode_args(real), "--username", username]
     if workdir:
         argv += ["--workdir", workdir]
     if gui:
@@ -123,12 +199,21 @@ def run(argv: list[str] | None = None) -> int:
         sigint_pump.timeout.connect(lambda: None)
         sigint_pump.start(200)
 
+    # Packaged binary: always real; source: mock unless CLIENTDECK_MODE=real — see [138].
+    real_mode = is_real_mode(packaged=is_packaged_build())
+    if real_mode:
+        print("ClientDeck: REAL mode — user creation/deletion and su/xhost launches will actually run.", file=sys.stderr)
+    else:
+        print("ClientDeck: mock mode — privileged scripts only print what they would run.", file=sys.stderr)
+
     store = ConfigStore()
     client_model = ClientListModel(store)
-    client_provisioner = _ClientProvisioner()
+    client_provisioner = _ClientProvisioner(real_mode)
     username_checker = _UsernameChecker()
     desktop_apps_provider = _DesktopAppsProvider()
-    app_launcher = _AppLauncher(store)
+    app_launcher = _AppLauncher(store, real_mode)
+    ps1_renderer = _Ps1Renderer()
+    focus_tracker = _FocusTracker(app)
 
     geometry, _initial_monitor_name = resolve_startup_geometry(
         store.window_state, _monitor_infos(app), default_size=DEFAULT_WINDOW_SIZE
@@ -145,6 +230,8 @@ def run(argv: list[str] | None = None) -> int:
         username_checker,
         desktop_apps_provider,
         app_launcher,
+        ps1_renderer,
+        focus_tracker,
     ]
     context = engine.rootContext()
     context.setContextProperty("clientModel", client_model)
@@ -152,16 +239,15 @@ def run(argv: list[str] | None = None) -> int:
     context.setContextProperty("usernameChecker", username_checker)
     context.setContextProperty("desktopAppsProvider", desktop_apps_provider)
     context.setContextProperty("appLauncher", app_launcher)
+    context.setContextProperty("ps1Renderer", ps1_renderer)
+    context.setContextProperty("focusTracker", focus_tracker)
     context.setContextProperty("initialX", geometry.x)
     context.setContextProperty("initialY", geometry.y)
     context.setContextProperty("initialWidth", geometry.width)
     context.setContextProperty("initialHeight", geometry.height)
-    # Fed to Theme.qml's noLogoSource — see docs/comments-details.md [125].
-    context.setContextProperty("noLogoLightPath", str(get_resources_dir() / "no-logo-light.png"))
-    context.setContextProperty("noLogoDarkPath", str(get_resources_dir() / "no-logo-dark.png"))
-    # Fed to Theme.qml's noAppSource — see docs/comments-details.md [126].
-    context.setContextProperty("noAppLightPath", str(get_resources_dir() / "no-app-light.png"))
-    context.setContextProperty("noAppDarkPath", str(get_resources_dir() / "no-app-dark.png"))
+    # Fed to Theme.qml's noItemSource — see docs/comments-details.md [125].
+    context.setContextProperty("noItemDarkThemePath", str(get_resources_dir() / "no-item-dark.png"))
+    context.setContextProperty("noItemLightThemePath", str(get_resources_dir() / "no-item-light.png"))
 
     # No addImportPath() needed — see [9].
     qml_dir = get_qml_dir()

@@ -21,7 +21,7 @@ Window {
     modality: Qt.WindowModal
     color: "transparent"
     visible: false
-    width: 420 * Theme.uiScale
+    width: 480 * Theme.uiScale
     height: contentColumn.implicitHeight + dialogPadding * 2
 
     readonly property real dialogPadding: 24 * Theme.uiScale
@@ -48,6 +48,11 @@ Window {
         usernameField.text = ""
         usernameField.touched = false
         root.logoPath = ""
+        advancedSection.expanded = false
+        supportDbusCheck.checked = true
+        supportDisplayCheck.checked = true
+        singleSshAgentCheck.checked = true
+        promptSetting.reset()
         creationFailed = false
     }
 
@@ -80,8 +85,11 @@ Window {
         root.close()
     }
 
+    // Only while this window is focused — nested dialogs' Escape shortcuts
+    // would otherwise all match at once and cancel out; see [137].
     Shortcut {
         sequence: "Escape"
+        enabled: focusTracker.focusWindow === root
         onActivated: root.close()
     }
 
@@ -114,10 +122,10 @@ Window {
                 spacing: Theme.spacing
 
                 // Fills the row height; width follows the image's own
-                // aspect ratio. Falls back to the themed no-logo
+                // aspect ratio. Falls back to the themed no-item
                 // placeholder when unset — see [125].
                 Image {
-                    source: root.logoPath || Theme.noLogoSource
+                    source: root.logoPath || Theme.noItemSource
                     fillMode: Image.PreserveAspectFit
                     Layout.preferredHeight: Theme.smallIconButtonSize * 2
                     Layout.preferredWidth: implicitHeight > 0
@@ -155,6 +163,35 @@ Window {
                 // invalid — see [119]: confirmed with the user at submit
                 // time instead, via useExistingUserConfirm below.
                 validator: (t) => t.trim().length > 0
+            }
+
+            // Advanced account-creation options — not yet acted on, see [129].
+            ThemedExpander {
+                id: advancedSection
+                Layout.fillWidth: true
+                title: "Advanced"
+
+                ThemedCheckBox {
+                    id: supportDbusCheck
+                    checked: true
+                    text: "Support DBus"
+                }
+                ThemedCheckBox {
+                    id: supportDisplayCheck
+                    checked: true
+                    text: "Support Wayland/X"
+                }
+                ThemedCheckBox {
+                    id: singleSshAgentCheck
+                    checked: true
+                    text: "Single SSH Agent"
+                }
+                PromptSetting {
+                    id: promptSetting
+                    Layout.fillWidth: true
+                    username: usernameField.text
+                    anchorWindow: root
+                }
             }
 
             Text {

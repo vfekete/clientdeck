@@ -36,10 +36,18 @@ Window {
         // Explicit activation request — see [123].
         root.requestActivate()
     }
-    function close() { root.visible = false }
+    function close() {
+        root.visible = false
+        // Hand focus back to the dialog underneath — see [137].
+        if (anchorWindow)
+            anchorWindow.requestActivate()
+    }
 
+    // Only while this window is focused — nested dialogs' Escape shortcuts
+    // would otherwise all match at once and cancel out; see [137].
     Shortcut {
         sequence: "Escape"
+        enabled: focusTracker.focusWindow === root
         onActivated: root.close()
     }
 

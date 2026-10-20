@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.17.0
+
+Merge of `feat/properties` (branch versions 0.1.0–0.9.1+feat.properties):
+reorganized "Add client" / "Add application" dialogs, right-click editing
+of clients and apps, and real vs. mocked runs.
+
+- **One "nothing set" placeholder** (`resources/no-item-dark.png` /
+  `no-item-light.png`, named for the theme they're shown in) for both
+  client logos and app icons, cropped and with a transparent background,
+  replacing the separate `no-logo-*`/`no-app-*` pairs.
+- **Right-click = edit, everywhere**: right-clicking a client's logo opens
+  "Edit client" (was double-click); right-clicking an app button opens
+  "Edit application". A right-button drag never reorders.
+- **Add/Edit client — "Advanced" section** (collapsible, collapsed by
+  default): "Support DBus", "Support Wayland/X", "Single SSH Agent"
+  (checked by default) and "Set bash prompt (PS1)" (unchecked) with
+  "Configure" and a "Selected: <preset or Custom>" line. Still UI-only:
+  not yet stored per client or applied to user creation.
+- **Bash prompt (PS1) dialog**: preset combo ("Default" = Debian's PS1,
+  "Neon"), PS1 input with ":" colon hints (`:user` → `\u`, `:hostname` →
+  `\h`, colors, …; Escape keeps the typed text), live preview as two
+  miniature dark/light terminal windows with real ANSI rendering
+  (`ps1.py`, no shell is run), Reset/Cancel/Apply, and a Yes/No confirm
+  before a preset replaces edited text.
+- **Add application**: the custom-command form is the default; "Pick
+  existing…" fills it (name, command, icon, su on; working directory
+  kept) instead of adding directly, with "Based on: <app>" + Clear
+  (restores the su state from before the pick); icon preview with
+  Browse… (replacing the free-text icon field); working directory
+  Browse… opens a directory picker. Motivation: picked apps need
+  command-line parameters and a working directory before being added.
+- **Edit application** (same dialog in edit mode): pre-filled, Apply
+  updates in place, Remove after a themed confirmation.
+- **Real vs. mocked runs**: `run.sh` → `run-mocked.sh`; new
+  `run-real.sh`. `CLIENTDECK_MODE=real` makes the app pass `--real` to
+  the privileged scripts (a flag, since pkexec clears the environment);
+  without it they stay mocked. Binaries built by `build.sh` are always
+  real.
+- New reusable QML components: `ThemedCheckBox`, `ThemedExpander`,
+  `ThemedComboBox`, `ColonHintTextField`; `ThemedButton.danger`.
+- **Fixes**: Escape did nothing in any dialog opened over another dialog
+  (ambiguous shortcuts — now gated on the focused window); the app
+  picker could stretch the dialog onto another monitor with many
+  installed apps; chosen icon paths containing spaces were stored
+  percent-encoded.
+
+Why: the user's planned scope for the branch — reorganize the "Add
+application" and "Add client" dialogs and let a right-click modify an
+application — plus making it possible to try the privileged actions for
+real. The branch's per-change entries (with each original request) are
+in the `feat/properties` history up to commit 503bbc3.
+
 ## 0.16.0
 
 - Removed "remove app" hold-to-delete gesture; app buttons are now

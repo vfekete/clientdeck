@@ -7,7 +7,9 @@ client" flow (see CLAUDE.md's "Privilege escalation" section) — this script
 itself does not invoke pkexec, it's the target of it.
 
 argv contract:
-    create_user.py USERNAME
+    create_user.py [--real] USERNAME
+
+    --real  actually run `useradd`, overriding MOCK_MODE for this call.
 
 Exit codes:
     0   user created
@@ -34,12 +36,15 @@ def build_useradd_command(username: str) -> list[str]:
     return ["useradd", "--create-home", "--user-group", username]
 
 
-def run(username: str) -> int:
+def run(username: str, mock: bool | None = None) -> int:
+    """`mock=None` means MOCK_MODE."""
+    if mock is None:
+        mock = MOCK_MODE
     if os.geteuid() != 0:
         print("create_user.py must be run as root (e.g. via pkexec).", file=sys.stderr)
         return EXIT_NOT_ROOT
     command = build_useradd_command(username)
-    if MOCK_MODE:
+    if mock:
         print(f"[MOCK] create_user.py: would run: {' '.join(command)}")
         return 0
     result = subprocess.run(command)
@@ -50,13 +55,14 @@ def run(username: str) -> int:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create a Linux user/group for a new ClientDeck client.")
+    parser.add_argument("--real", action="store_true", help="Really run the command (default: mock)")
     parser.add_argument("username")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
-    return run(args.username)
+    return run(args.username, mock=False if args.real else None)
 
 
 if __name__ == "__main__":

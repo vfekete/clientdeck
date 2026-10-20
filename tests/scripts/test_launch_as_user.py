@@ -139,3 +139,22 @@ def test_parse_args_happy_path():
     assert args.username == "acme"
     assert args.gui is True
     assert args.command == ["code", "--new-window"]
+
+
+def test_real_flag_runs_xhost_and_su_despite_mock_mode_default(monkeypatch):
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, check=False: calls.append(list(cmd)) or _FakeCompletedProcess(0))
+
+    assert launch_as_user.MOCK_MODE is True
+    assert launch_as_user.main(["--real", "--username", "acme", "--gui", "xterm"]) == 0
+    assert calls == [
+        ["xhost", "+SI:localhost:acme"],
+        ["su", "-", "acme", "-c", "xterm"],
+        ["xhost", "-SI:localhost:acme"],
+    ]
+
+
+def test_without_real_flag_main_stays_mocked(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not run")))
+
+    assert launch_as_user.main(["--username", "acme", "--gui", "xterm"]) == 0

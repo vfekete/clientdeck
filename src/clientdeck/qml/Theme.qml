@@ -5,10 +5,8 @@ import QtQuick
 QtObject {
     property bool isDark: true
 
-    // High-contrast placeholder when a client has no logo — see [125].
-    readonly property string noLogoSource: isDark ? noLogoLightPath : noLogoDarkPath
-    // Same idea, for an application with no icon set — see [126].
-    readonly property string noAppSource: isDark ? noAppLightPath : noAppDarkPath
+    // High-contrast placeholder for a client logo or app icon that isn't set — see [125], [126].
+    readonly property string noItemSource: isDark ? noItemDarkThemePath : noItemLightThemePath
 
     readonly property color background: isDark ? "#14161c" : "#f4f5f7"
     // Off-white, not pure white — see [24].
@@ -72,6 +70,9 @@ QtObject {
     readonly property int fontSizeBody: Math.round(13 * uiScale)
     readonly property int fontSizeMedium: Math.round(15 * uiScale)
     readonly property int fontSizeLarge: Math.round(18 * uiScale)
+
+    // Fontconfig's generic monospace alias (PS1 input/preview).
+    readonly property string monoFontFamily: "monospace"
 
     readonly property real fieldPadding: 10 * uiScale
     readonly property real fieldRightPadding: 30 * uiScale

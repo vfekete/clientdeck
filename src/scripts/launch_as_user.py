@@ -8,7 +8,9 @@ it exits (clean exit, non-zero exit, or this script being killed/crashing),
 so the X access grant is never leaked.
 
 argv contract:
-    launch_as_user.py --username USER [--workdir DIR] [--gui] COMMAND [ARGS...]
+    launch_as_user.py [--real] --username USER [--workdir DIR] [--gui] COMMAND [ARGS...]
+
+    --real  actually run su/xhost, overriding MOCK_MODE for this call.
 
 Exit code: the launched command's own exit code, or a small fixed non-zero
 code if `su` itself could not be started at all (e.g. not installed).
@@ -53,8 +55,11 @@ def _run_best_effort(cmd: list[str]) -> None:
         pass
 
 
-def run(username: str, command: list[str], workdir: str | None, gui: bool) -> int:
-    if MOCK_MODE:
+def run(username: str, command: list[str], workdir: str | None, gui: bool, mock: bool | None = None) -> int:
+    """`mock=None` means MOCK_MODE."""
+    if mock is None:
+        mock = MOCK_MODE
+    if mock:
         if gui:
             print(f"[MOCK] launch_as_user.py: would run: {' '.join(build_xhost_grant_command(username))}")
         print(f"[MOCK] launch_as_user.py: would run: {' '.join(build_su_command(username, command, workdir))}")
@@ -79,6 +84,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Launch a command as another user, impersonating a ClientDeck client."
     )
+    parser.add_argument("--real", action="store_true", help="Really run su/xhost (default: mock)")
     parser.add_argument("--username", required=True, help="Linux username to impersonate")
     parser.add_argument("--workdir", default=None, help="Working directory for the launched command")
     parser.add_argument(
@@ -95,7 +101,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
-    return run(args.username, args.command, args.workdir, args.gui)
+    return run(args.username, args.command, args.workdir, args.gui, mock=False if args.real else None)
 
 
 if __name__ == "__main__":
